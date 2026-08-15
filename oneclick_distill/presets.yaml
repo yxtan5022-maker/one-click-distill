@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# OneClick Distill — presets
+# Model presets and hyper-parameter strategies per "size" tier.
+# Users only pick a tier; the engine picks the rest.
+# ---------------------------------------------------------------------------
+
+models:
+  smoke: "hf-internal-testing/tiny-random-gpt2"   # tiny, for smoke tests / CI
+  ultra: "Qwen/Qwen2.5-0.5B"                      # 极速版 0.5B-1.5B
+  balanced: "Qwen/Qwen2.5-3B"                     # 平衡版 3B-7B
+
+sizes:
+  ultra:
+    max_seq_len: 512
+    epochs: 3
+    lora_r: 8
+    lora_alpha: 16
+    lora_dropout: 0.05
+    lr: 2.0e-4
+    batch_size: 4
+    grad_accumulation_steps: 4
+    max_grad_norm: 1.0
+    gradient_checkpointing: true
+    target_modules: null   # null => all linear layers
+  balanced:
+    max_seq_len: 1024
+    epochs: 3
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    lr: 1.0e-4
+    batch_size: 2
+    grad_accumulation_steps: 8
+    max_grad_norm: 1.0
+    gradient_checkpointing: true
+    target_modules: null
+
+# Teacher providers (OpenAI-compatible chat completions API).
+teachers:
+  deepseek:
+    base_url: "https://api.deepseek.com/v1"
+    model: "deepseek-chat"
+  openai:
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o-mini"
+  local:
+    base_url: "http://127.0.0.1:11434/v1"
+    model: "qwen2.5:7b"
+
+# Instruction template used to frame (prompt, response) pairs during SFT.
+template: |-
+  {instruction}

@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oneclick-distill"
+version = "0.1.0"
+description = "One-click model distillation for everyone. Open-source, zero-config, agent-friendly."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "OneClick Distill contributors" }]
+keywords = ["llm", "distillation", "fine-tune", "lora", "gguf", "mcp"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "torch>=2.1",
+    "transformers>=4.40",
+    "huggingface-hub>=0.23",
+    "safetensors>=0.4",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "websockets>=12",
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "mcp>=1.0",
+]
+
+[project.optional-dependencies]
+unsloth = ["unsloth"]
+quantize = ["gguf>=0.10", "sentencepiece>=0.1.99"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+oneclick-distill = "oneclick_distill.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["oneclick_distill*"]
+
+[tool.setuptools.package-data]
+"oneclick_distill" = ["web/*.html", "web/*.js", "web/*.css", "presets.yaml", "sample_data/*.jsonl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "smoke: quick end-to-end smoke tests on tiny models",
+]

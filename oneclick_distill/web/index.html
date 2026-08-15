@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OneClick Distill — 一键模型蒸馏</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#171a24; --card2:#1d2130; --line:#2a2f42; --text:#e6e8ef;
+    --dim:#8b93a7; --acc:#6366f1; --acc2:#22d3ee; --ok:#34d399; --warn:#fbbf24; --err:#f87171;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;min-height:100vh}
+  .wrap{max-width:960px;margin:0 auto;padding:24px 16px 80px}
+  header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line)}
+  .logo{font-size:20px;font-weight:700}
+  .logo span{color:var(--acc2)}
+  .agent-banner{display:none;align-items:center;gap:10px;background:linear-gradient(90deg,#312e81,#164e63);
+    border:1px solid #4f46e5;border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px}
+  .agent-banner.show{display:flex}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--acc2);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .steps{display:grid;gap:14px;margin-top:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card h2{font-size:15px;margin-bottom:12px;color:var(--dim);font-weight:600}
+  .card h2 b{color:var(--text)}
+  .drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--dim);cursor:pointer}
+  .drop.hover{border-color:var(--acc2);color:var(--text)}
+  .filelist{list-style:none;margin-top:10px;font-size:13px}
+  .filelist li{background:var(--card2);padding:6px 10px;border-radius:8px;margin-top:6px;display:flex;justify-content:space-between}
+  .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .chip{background:var(--card2);border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:12px 14px;cursor:pointer;flex:1;min-width:180px}
+  .chip.active{border-color:var(--acc2);color:var(--text)}
+  .chip .t{font-weight:600;color:var(--text)}
+  .chip .d{font-size:12px;margin-top:4px}
+  select,button,input[type=text],textarea{background:var(--card2);border:1px solid var(--line);color:var(--text);
+    border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit}
+  button{cursor:pointer}
+  button.primary{background:linear-gradient(90deg,#6366f1,#22d3ee);border:none;color:#fff;font-weight:700;padding:12px 22px}
+  button.primary:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+  .hw{background:var(--card2);border-radius:10px;padding:12px;font-size:13px;margin-top:12px;display:none;line-height:1.8}
+  .hw.show{display:block}
+  .hw .ok{color:var(--ok)} .hw .warn{color:var(--warn)}
+  .progress{margin-top:12px;display:none}
+  .progress.show{display:block}
+  .stage{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--dim)}
+  .stage .bar{flex:1;height:6px;background:var(--card2);border-radius:4px;overflow:hidden}
+  .stage .fill{height:100%;width:0;background:linear-gradient(90deg,#6366f1,#22d3ee);transition:width .3s}
+  .log{margin-top:10px;max-height:160px;overflow-y:auto;font-family:Consolas,monospace;font-size:12px;
+    background:#0a0c12;border:1px solid var(--line);border-radius:8px;padding:10px;color:var(--dim)}
+  .log div.agent{color:var(--acc2)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+  @media(max-width:700px){.split{grid-template-columns:1fr}}
+  .qa{background:var(--card2);border-radius:10px;padding:12px}
+  .qa h3{font-size:13px;color:var(--dim);margin-bottom:8px}
+  .qa .ans{font-size:14px;line-height:1.7;white-space:pre-wrap}
+  .qa .meta{font-size:12px;color:var(--dim);margin-top:8px}
+  .exports{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+  @media(max-width:700px){.exports{grid-template-columns:1fr}}
+  .export{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;cursor:pointer}
+  .export:hover{border-color:var(--acc2)}
+  .export .e{font-size:22px}
+  .hint{font-size:12px;color:var(--dim);margin-top:8px}
+  .msg{font-size:12px;color:var(--err);margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">OneClick <span>Distill</span></div>
+    <div id="serverStatus" style="font-size:12px;color:var(--dim)">连接中…</div>
+  </header>
+
+  <div id="agentBanner" class="agent-banner">
+    <div class="dot"></div>
+    <div><b>Agent 托管中</b> — 任务由外部 AI 工具（CLI/MCP）下发，后台静默执行，界面实时同步。</div>
+  </div>
+
+  <div class="steps">
+    <div class="card">
+      <h2><b>①</b> 导入素材 &amp; 选教师模型</h2>
+      <div id="drop" class="drop">拖拽 TXT / PDF / Markdown / JSON 到这里，或点击选择</div>
+      <input type="file" id="fileInput" multiple style="display:none">
+      <ul id="fileList" class="filelist"></ul>
+      <div class="row">
+        <select id="teacher">
+          <option value="none">不使用教师模型（直接用问答数据）</option>
+          <option value="deepseek">DeepSeek（合成数据）</option>
+          <option value="openai">OpenAI（合成数据）</option>
+          <option value="local">本地 Ollama（合成数据）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><b>②</b> 目标规格 &amp; 硬件自检</h2>
+      <div class="row">
+        <div class="chip active" data-size="ultra"><div class="t">极速版 0.5B</div><div class="d">快 · 省资源 · 适合普通电脑</div></div>
+        <div class="chip" data-size="balanced"><div class="t">平衡版 3B</div><div class="d">更强 · 需要更好显卡</div></div>
+      </div>
+      <div id="hwInfo" class="hw"></div>
+    </div>
+
+    <div class="card">
+      <h2><b>③</b> 启动蒸馏 &amp; 实时监控</h2>
+      <div class="row">
+        <button id="startBtn" class="primary">开始蒸馏</button>
+        <label class="hint" style="margin:0"><input type="checkbox" id="skipQ"> 跳过 GGUF 导出</label>
+      </div>
+      <div id="progress" class="progress">
+        <div id="stage0" class="stage"><span>初始化</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="stage1" class="stage"><span>数据合成</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="stage2" class="stage"><span>微调训练</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="stage3" class="stage"><span>量化导出</span><div class="bar"><div class="fill"></div></div></div>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>A/B 效果对比 Playground</h2>
+    <div class="row">
+      <input type="text" id="question" style="flex:3" placeholder="输入问题，对比教师模型与蒸馏小模型">
+      <button id="askBtn" class="ghost">提问</button>
+    </div>
+    <div id="compare" class="split"></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>一键分发</h2>
+    <div class="exports">
+      <div class="export" id="exportGguf"><div class="e">⬇️</div><div>导出 .gguf 文件</div></div>
+      <div class="export" id="exportOllama"><div class="e">🐳</div><div>一键导入 Ollama</div></div>
+      <div class="export" id="exportApi"><div class="e">🔌</div><div>启动本地 API 节点</div></div>
+    </div>
+    <div id="exportMsg" class="msg"></div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let files=[], currentJob=null, latestResult=null, hw=null, ws=null;
+
+async function api(path, opts){ const r=await fetch(path, opts); if(!r.ok){ let e=await r.json().catch(()=>({})); throw new Error(e.error||('HTTP '+r.status)); } return r.json(); }
+
+async function checkHardware(){
+  try{
+    hw=await api('/api/hardware');
+    const s=hw.strategy, el=$('#hwInfo');
+    const lines=[
+      `<b>${hw.device_name}</b>（${hw.device==='cuda'?('显存可用 '+hw.free_vram_gb+' GB'):'CPU 模式'} · 内存 ${hw.free_ram_gb} GB · 磁盘 ${hw.disk_free_gb} GB）`,
+      ...s.notes.map(n=>`<div class="${n.includes('降级')||n.includes('紧张')?'warn':'ok'}">• ${n}</div>`),
+      `<div class="hint">后端 ${s.backend} · 量化 ${s.quantized} · batch=${s.batch_size} · grad_accum=${s.grad_accumulation_steps} · max_seq=${s.max_seq_len}</div>`
+    ];
+    el.innerHTML=lines.join('');
+    el.classList.add('show');
+  }catch(e){}
+}
+checkHardware();
+setInterval(checkHardware, 15000);
+
+// ---- files ----
+const drop=$('#drop');
+drop.onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>upload(e.target.files);
+drop.ondragover=e=>{e.preventDefault();drop.classList.add('hover')};
+drop.ondragleave=()=>drop.classList.remove('hover');
+drop.ondrop=e=>{e.preventDefault();drop.classList.remove('hover');upload(e.dataTransfer.files)};
+async function upload(list){
+  for(const f of list){
+    const fd=new FormData(); fd.append('file',f);
+    try{ const r=await api('/api/files',{method:'POST',body:fd}); files.push(r.path);
+      $('#fileList').insertAdjacentHTML('beforeend',`<li><span>${r.name}</span><span>${(r.size/1024).toFixed(0)} KB</span></li>`);
+    }catch(e){ alert('上传失败: '+e.message); }
+  }
+}
+
+// ---- size chips ----
+document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+  c.classList.add('active');
+});
+
+function stageFill(stage,val){ const el=document.getElementById('stage'+stage); if(el) el.querySelector('.fill').style.width=(val*100)+'%'; }
+
+function logLine(msg,agent){ const d=document.createElement('div'); if(agent)d.className='agent'; d.textContent='['+new Date().toLocaleTimeString()+'] '+(agent?'🤖 ':'')+msg; $('#log').appendChild(d); $('#log').scrollTop=$('#log').scrollHeight; }
+
+function mapStageToIndex(stage){ return {prepare:0,data:0,synthetic:1,train:2,quantize:3}[stage] ?? 0; }
+
+// ---- start job ----
+$('#startBtn').onclick=async()=>{
+  if(files.length===0 && $('#teacher').value==='none'){
+    alert('请先拖入数据文件，或选择教师模型合成数据');
+    return;
+  }
+  const size=document.querySelector('.chip.active').dataset.size;
+  const body={source:'ui',size,quantize:!$('#skipQ').checked,
+    teacher:{name:$('#teacher').value,model:'',base_url:'',api_key:''},
+    data_paths:files};
+  $('#startBtn').disabled=true;
+  $('#progress').classList.add('show');
+  try{
+    const job=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    currentJob=job.id;
+    connectWS(job.id);
+  }catch(e){ logLine('提交失败: '+e.message); $('#startBtn').disabled=false; }
+};
+
+function connectWS(jobId){
+  if(ws) ws.close();
+  const proto=location.protocol==='https:'?'wss':'ws';
+  ws=new WebSocket(`${proto}://${location.host}/ws/jobs/${jobId}`);
+  ws.onmessage=e=>{
+    const st=JSON.parse(e.data);
+    if(st.source!=='ui'){ $('#agentBanner').classList.add('show'); }
+    logLine(`${st.stage}: ${st.message}`);
+    stageFill(mapStageToIndex(st.stage), st.progress);
+    if(st.metrics?.loss) logLine(`  loss=${st.metrics.loss}`);
+    if(st.status==='done'){ latestResult=st.result; onDone(st); }
+    if(st.status==='failed'){ logLine('失败: '+(st.error||st.message)); $('#startBtn').disabled=false; }
+  };
+}
+function onDone(st){
+  logLine('✅ 蒸馏完成。模型目录: '+st.result.model_dir);
+  $('#startBtn').disabled=false;
+}
+
+// ---- playground ----
+$('#askBtn').onclick=async()=>{
+  const q=$('#question').value.trim();
+  if(!q) return;
+  $('#compare').innerHTML='<div class="qa"><div class="ans">对比中…</div></div>';
+  try{
+    const r=await api('/api/playground/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});
+    $('#compare').innerHTML=
+      `<div class="qa"><h3>🧑‍🏫 教师模型</h3><div class="ans">${r.teacher.answer}</div><div class="meta">⏱ ${r.teacher.latency_ms==null?'—':r.teacher.latency_ms+' ms'}</div></div>`+
+      `<div class="qa"><h3>🧊 蒸馏小模型</h3><div class="ans">${r.student.answer}</div><div class="meta">⏱ ${r.student.latency_ms} ms</div></div>`;
+  }catch(e){ $('#compare').innerHTML=`<div class="qa"><div class="ans">${e.message}</div></div>`; }
+};
+
+// ---- exports ----
+$('#exportGguf').onclick=()=>{
+  if(!latestResult?.gguf_url){ $('#exportMsg').textContent='当前没有量化结果。请先完成一次含 GGUF 导出的蒸馏。'; return; }
+  location.href=latestResult.gguf_url;
+};
+$('#exportOllama').onclick=async()=>{
+  if(!latestResult?.gguf){ $('#exportMsg').textContent='当前没有量化结果。'; return; }
+  try{
+    const r=await api('/api/ollama?gguf='+encodeURIComponent(latestResult.gguf));
+    $('#exportMsg').textContent='已生成 Modelfile：'+r.command;
+  }catch(e){ $('#exportMsg').textContent=e.message; }
+};
+$('#exportApi').onclick=()=>{
+  $('#exportMsg').textContent='本地 API 节点：oneclick-distill serve（OpenAI 兼容 /v1 接口，下一里程碑内置）。';
+};
+
+// ---- server status ----
+api('/api/health').then(()=>$('#serverStatus').textContent='● 服务运行中').catch(()=>$('#serverStatus').textContent='○ 服务未连接');
+</script>
+</body>
+</html>

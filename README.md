@@ -1,0 +1,109 @@
+<div align="center">
+
+# OneClick Distill 🧊
+
+**开源 · 一键 · 模型蒸馏** — 把大模型的能力蒸馏进小模型，零门槛、零配置、Agent 友好。
+
+`oneclick-distill` 是完整的数据导入 → 数据合成 → 微调训练 → GGUF 量化导出的桌面级蒸馏流水线。GUI（内置 Web UI）、CLI、MCP 三种入口共用同一套 job 契约，普通用户一键点选，AI Agent 也能直接驱动。
+
+</div>
+
+## ✨ 特性
+
+- **三步傻瓜式流程**：导入素材 & 选教师模型 → 选规格 & 硬件自检 → 启动蒸馏 & A/B 对比
+- **CPU 保底 / GPU 加速双后端**：无 NVIDIA 显卡也能用（transformers 自研 LoRA），有显卡自动切换 Unsloth QLoRA
+- **显存防爆（保命模式）**：硬件探针 → 动态超参数下探 → 试运行探路 → 运行时 OOM 自动降级
+- **开箱即用**：`pip install oneclick-distill` 即可运行，无额外编译依赖
+- **Agent 友好**：标准 CLI + MCP stdio server，Codex / OpenCode / OpenManus 可直接下发蒸馏指令
+- **GGUF 一键分发**：调用 llama.cpp 官方工具导出量化模型，可导入 Ollama
+
+## 🚀 快速开始
+
+```bash
+git clone https://github.com/yxtan5022-maker/one-click-distill.git
+cd one-click-distill
+pip install -e .
+
+# 1. 硬件自检（显示显存/内存/防爆策略）
+oneclick-distill hardware
+
+# 2. 一键演示：内置数据，CPU 上跑通冒烟流程（~2MB 小模型）
+oneclick-distill demo --max-steps 5
+
+# 3. 启动内置 Web UI（三步卡片流 + 实时进度 + A/B Playground）
+oneclick-distill serve
+# 浏览器打开 http://127.0.0.1:8080
+```
+
+### 完整蒸馏流程（CLI）
+
+```bash
+oneclick-distill pipeline \
+  --data ./docs ./notes.md \
+  --teacher deepseek --teacher-api-key sk-xxx \
+  --size balanced \
+  --out-dir runs/my-first-distill
+```
+
+带教师模型时会先调用 DeepSeek/OpenAI/本地 Ollama 合成问答训练数据，再微调学生模型，最后导出 GGUF。
+
+## 🤖 Agent 集成（MCP）
+
+```bash
+oneclick-distill mcp
+```
+
+MCP 暴露三个工具：`hardware` / `start_pipeline` / `pipeline_status`。配置示例（Codex / OpenCode / Claude Desktop）：
+
+```json
+{
+  "mcpServers": {
+    "oneclick-distill": {
+      "command": "oneclick-distill",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Agent 下发的任务会出现在 Web UI 的 **"Agent 托管中"** 横幅中并实时同步日志。
+
+## 🗺️ 路线图
+
+- [x] MVP：CLI + FastAPI/WS + 内置 Web UI + MCP + CPU/GPU 双后端
+- [ ] Electron 桌面外壳（三卡片流 + 显存占用图）
+- [ ] Windows / macOS 一键安装包（嵌入式 Python 运行时 + 预编译工具）
+- [ ] llama-server 本地 API 节点（OpenAI 兼容 /v1）
+- [ ] 自动 A/B 评测指标（响应时延、一致性）
+
+## 📦 数据格式
+
+- **输入**：`.txt` / `.md` / `.json` / `.jsonl` / `.pdf`（PDF 需 `pip install pypdf`）
+- **问答对格式**（不使用教师模型时）：每行 `{"prompt": "...", "response": "..."}`
+
+## ⚙️ 配置
+
+复制 `.env.example` 为 `.env`：
+
+| 变量 | 说明 |
+|---|---|
+| `TEACHER_BASE_URL` / `TEACHER_MODEL` / `TEACHER_API_KEY` | 教师模型 API（数据合成用） |
+| `HF_TOKEN` | HuggingFace 令牌（下载 gated 模型用） |
+| `HOST` / `PORT` | 服务监听地址 |
+
+## 🧪 测试
+
+```bash
+pip install -e .[dev]
+pytest
+```
+
+## 📄 License
+
+MIT License — 详见 [LICENSE](LICENSE)。
+
+## 🙏 致谢
+
+- [Unsloth](https://github.com/unslothai/unsloth) — 极致微调速度
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) — GGUF 量化与推理
+- [HuggingFace Transformers](https://github.com/huggingface/transformers) — 模型生态
