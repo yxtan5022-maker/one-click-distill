@@ -44,6 +44,7 @@ jobs:
         run: ${{ matrix.script }}
 
       - name: Package desktop app
+        shell: bash
         working-directory: desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

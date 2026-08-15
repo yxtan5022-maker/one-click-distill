@@ -33,7 +33,15 @@ esac
 echo "==> portable python for $MACH-$OS"
 mkdir -p "$RUNTIME" "$PYDIR" "$TOOLS"
 
-ASSET="$(curl -fsSL https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest \
+# Resolve the asset name from the latest python-build-standalone release.
+# Prefer `gh` (authenticated on GitHub runners, avoids API rate limiting),
+# fall back to the raw GitHub API.
+if command -v gh >/dev/null 2>&1; then
+  API_JSON="$(gh api repos/astral-sh/python-build-standalone/releases/latest)"
+else
+  API_JSON="$(curl -fsSL https://api.github.com/repos/astral-sh/python-build-standalone/releases/latest)"
+fi
+ASSET="$(printf '%s' "$API_JSON" \
   | python3 -c "import json,sys; d=json.load(sys.stdin); print(next(a['browser_download_url'] for a in d['assets'] if a['name'].startswith('cpython-3.12.') and '${MACH}-${OS}-install_only.tar.gz' in a['name']))")"
 echo "==> download $ASSET"
 curl -fL "$ASSET" -o /tmp/pybs.tar.gz
