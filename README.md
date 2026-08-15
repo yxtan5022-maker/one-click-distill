@@ -75,7 +75,8 @@ Agent 下发的任务会出现在 Web UI 的 **"Agent 托管中"** 横幅中并�
 - [x] Windows 一键安装包（嵌入式 Python 运行时 + 预编译 llama.cpp 工具）
 - [x] llama-server 本地 API 节点（OpenAI 兼容 /v1）
 - [x] 自动 A/B 评测指标（响应时延、一致性）
-- [ ] macOS / Linux 安装包（electron-builder 打包已在 CI 接入，待平台运行时构建收敛）
+- [x] macOS / Linux 安装包（CI 矩阵构建 dmg / AppImage 已产出）
+  - 待办：macOS/Linux 的 llama.cpp 量化工具链二进制与平台端到端冒烟测试
 
 ### 桌面应用与打包
 
