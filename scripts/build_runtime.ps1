@@ -60,7 +60,16 @@ if ($LASTEXITCODE -ne 0) { throw "package install failed ($LASTEXITCODE)" }
 
 Write-Host "==> bundle llama.cpp tools"
 New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
-Copy-Item (Join-Path $root "oneclick_distill\tools\*") $toolsDir -Recurse -Force -ErrorAction Stop
+$toolsSrc = Join-Path $root "oneclick_distill\tools"
+if (Test-Path $toolsSrc) {
+    Copy-Item (Join-Path $toolsSrc "*") $toolsDir -Recurse -Force -ErrorAction Stop
+} else {
+    Write-Host "==> tools not present locally; download into runtime via ensure_tools()"
+    $env:OCD_TOOLS_DIR = $toolsDir
+    & $exe -c "import oneclick_distill.quantize.llama_cpp as q; print('tools:', q.ensure_tools())"
+    if ($LASTEXITCODE -ne 0) { throw "ensure_tools failed ($LASTEXITCODE)" }
+    Remove-Item Env:OCD_TOOLS_DIR
+}
 
 Write-Host "==> write launcher"
 Copy-Item (Join-Path $root "server_launcher.py") (Join-Path $runtime "launcher.py") -Force

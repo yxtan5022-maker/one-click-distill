@@ -58,6 +58,10 @@ echo "==> install oneclick-distill itself"
 echo "==> write launcher"
 cp "$ROOT/server_launcher.py" "$RUNTIME/launcher.py"
 
+echo "==> bundle llama.cpp tools (best effort)"
+OCD_TOOLS_DIR="$TOOLS" "$PY" -c "import oneclick_distill.quantize.llama_cpp as q; print('tools:', q.ensure_tools())" \
+  || echo "tools download failed/skipped (mac/linux quantize binary not available yet)"
+
 find "$RUNTIME" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
 SIZE=$(du -sm "$RUNTIME" | cut -f1)
