@@ -78,6 +78,45 @@ def _build_server():
             return {"error": f"job {job_id} not found"}
         return state.to_dict()
 
+    @server.tool(
+        name="local_server_start",
+        description="把 GGUF 启动成本地 OpenAI 兼容 API 节点（llama.cpp llama-server），返回 base_url。",
+    )
+    def local_server_start(gguf: str, port: int = 8123, ctx_size: int = 2048) -> dict:
+        from ..serve_model import start_server
+
+        try:
+            return start_server(gguf, port=port, ctx_size=ctx_size)
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e)}
+
+    @server.tool(name="local_server_stop", description="停止指定端口的本地 API 节点。")
+    def local_server_stop(port: int = 8123) -> dict:
+        from ..serve_model import stop_server
+
+        return stop_server(port)
+
+    @server.tool(name="local_server_status", description="列出运行中的本地 API 节点（跨进程）。")
+    def local_server_status() -> dict:
+        from ..serve_model import list_servers
+
+        return {"servers": list_servers()}
+
+    @server.tool(
+        name="evaluate",
+        description=(
+            "A/B 评测教师 vs 学生：跑同一组问题，输出时延分布（avg/p95）、吞吐和回答一致性"
+            "（exact_match + ROUGE-L F1）。student/teacher 语法：transformers:<目录> 或 openai:<url>#<模型>。"
+        ),
+    )
+    def evaluate(student: str, teacher: str, questions: list[str], max_tokens: int = 128) -> dict:
+        from ..eval import evaluate as _evaluate
+
+        try:
+            return _evaluate(student, teacher, list(questions), max_tokens=max_tokens)
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e)}
+
     return server
 
 

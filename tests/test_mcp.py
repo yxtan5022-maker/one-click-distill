@@ -19,7 +19,15 @@ async def _check():
             await session.initialize()
             tools = await session.list_tools()
             names = [t.name for t in tools.tools]
-            assert names == ["hardware", "start_pipeline", "pipeline_status"], names
+            assert names == [
+                "hardware",
+                "start_pipeline",
+                "pipeline_status",
+                "local_server_start",
+                "local_server_stop",
+                "local_server_status",
+                "evaluate",
+            ], names
             res = await session.call_tool("hardware", {})
             hw = json.loads(res.content[0].text)
             assert hw["device"] in ("cpu", "cuda")

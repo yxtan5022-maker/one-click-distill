@@ -195,3 +195,86 @@ async def ollama_import(body: dict):
     modelfile = Path(gguf).with_suffix(".Modelfile")
     modelfile.write_text(f"FROM {gguf}\n", encoding="utf-8")
     return {"modelfile": str(modelfile), "command": f"ollama create {name} -f {modelfile}"}
+
+
+# ---------------------------------------------------------------------------
+# Local API node (llama.cpp llama-server, OpenAI-compatible /v1)
+# ---------------------------------------------------------------------------
+@app.get("/api/server")
+async def server_status():
+    from ..serve_model import list_servers
+
+    return {"servers": list_servers()}
+
+
+@app.post("/api/server/start")
+async def server_start(body: dict):
+    from ..serve_model import start_server
+
+    gguf = body.get("gguf", "")
+    if not gguf or not Path(gguf).exists():
+        return JSONResponse({"error": "GGUF 文件不存在"}, status_code=404)
+    try:
+        info = start_server(gguf, port=int(body.get("port", 8123)), ctx_size=int(body.get("ctx_size", 2048)))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"启动失败: {e}"}, status_code=500)
+    return info
+
+
+@app.post("/api/server/stop")
+async def server_stop(body: dict):
+    from ..serve_model import stop_server
+
+    return stop_server(int(body.get("port", 8123)))
+
+
+# ---------------------------------------------------------------------------
+# Live system metrics (drives the desktop VRAM/CPU chart)
+# ---------------------------------------------------------------------------
+@app.get("/api/metrics")
+async def metrics():
+    try:
+        import psutil
+
+        mem = psutil.virtual_memory()
+        cpu = psutil.cpu_percent(interval=None)
+    except Exception:  # noqa: BLE001
+        return {"cpu_percent": 0.0, "ram_used_gb": 0.0, "ram_total_gb": 0.0, "vram_used_gb": 0.0, "device": "cpu"}
+    try:
+        import torch
+
+        vram_used = 0.0
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        if device == "cuda":
+            vram_used = round(torch.cuda.memory_allocated(0) / 1024**3, 3)
+    except Exception:  # noqa: BLE001
+        vram_used, device = 0.0, "cpu"
+    return {
+        "cpu_percent": round(cpu, 1),
+        "ram_used_gb": round(mem.used / 1024**3, 2),
+        "ram_total_gb": round(mem.total / 1024**3, 1),
+        "vram_used_gb": vram_used,
+        "device": device,
+        "time": time.time(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# A/B evaluation (latency + consistency), shared with CLI `eval`
+# ---------------------------------------------------------------------------
+@app.post("/api/eval")
+async def run_eval(body: dict):
+    from ..eval import evaluate
+
+    student = body.get("student", "")
+    teacher = body.get("teacher", "")
+    questions = body.get("questions") or []
+    if not student or not teacher:
+        return JSONResponse({"error": "需要 student 与 teacher 后端"}, status_code=422)
+    if not questions:
+        return JSONResponse({"error": "需要 questions 列表"}, status_code=422)
+    try:
+        result = evaluate(student, teacher, list(questions), max_tokens=int(body.get("max_tokens", 128)))
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"评测失败: {e}"}, status_code=500)
+    return result

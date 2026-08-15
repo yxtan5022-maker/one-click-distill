@@ -161,6 +161,58 @@ def cmd_ollama(args) -> int:
     return 0
 
 
+def cmd_serve_model(args) -> int:
+    """Start / stop a local OpenAI-compatible API node (llama.cpp llama-server)."""
+    from .serve_model import list_servers, start_server, stop_server
+
+    if args.stop:
+        _print_json(stop_server(args.port))
+        return 0
+    if args.gguf:
+        try:
+            info = start_server(args.gguf, port=args.port, host=args.host, ctx_size=args.ctx_size)
+        except Exception as e:  # noqa: BLE001
+            print(f"启动失败: {e}", file=sys.stderr)
+            return 1
+        _print_json(info)
+        print(f"本地 API 节点已启动: {info.get('base_url')}/v1/chat/completions", file=sys.stderr)
+        return 0
+    _print_json(list_servers())
+    return 0
+
+
+def cmd_eval(args) -> int:
+    """A/B evaluation: latency + consistency between teacher and student."""
+    from .eval import Backend, evaluate, load_questions
+
+    questions = load_questions(args.questions, None) or []
+    if not questions:
+        print("未提供问题（--questions N / 文件 / 字符串）", file=sys.stderr)
+        return 1
+    try:
+        student = Backend.parse(args.student)
+        teacher = Backend.parse(args.teacher)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    print(f"学生后端: {student.kind}:{student.model or student.base_url}", file=sys.stderr)
+    print(f"教师后端: {teacher.kind}:{teacher.model or teacher.base_url}", file=sys.stderr)
+    result = evaluate(args.student, args.teacher, questions, max_tokens=args.max_tokens)
+    if args.json:
+        _print_json(result)
+    else:
+        c = result["consistency"]
+        print(f"评测 {result['n_questions']} 题")
+        print(f"  教师延迟 avg {result['teacher']['avg_ms']}ms / p95 {result['teacher']['p95_ms']}ms")
+        print(f"  学生延迟 avg {result['student']['avg_ms']}ms / p95 {result['student']['p95_ms']}ms  吞吐 {result['student']['tokens_per_sec']} tok/s")
+        print(f"  一致性 exact_match={c['exact_match_rate']:.2%}  ROUGE-L F1={c['rouge_l_f1']:.4f}  相对加速 {result['relative_speedup_x']}x")
+        for x in result["samples"]:
+            print(f"  [{x['rouge_l_f1']:.2f}] Q: {x['question'][:32]}")
+            print(f"      T: {x['teacher_answer'][:60]!r}")
+            print(f"      S: {x['student_answer'][:60]!r}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="oneclick-distill",
@@ -208,6 +260,22 @@ def build_parser() -> argparse.ArgumentParser:
     olla.add_argument("--gguf", required=True)
     olla.add_argument("--name", default="")
     olla.set_defaults(func=cmd_ollama)
+
+    sm = sub.add_parser("serve-model", help="启动/停止本地 OpenAI 兼容 API 节点（llama-server）")
+    sm.add_argument("--gguf", default="", help="GGUF 文件；缺省时仅列出运行中的节点")
+    sm.add_argument("--port", type=int, default=8123)
+    sm.add_argument("--host", default="127.0.0.1")
+    sm.add_argument("--ctx-size", type=int, default=2048)
+    sm.add_argument("--stop", action="store_true", help="停止 --port 上的节点")
+    sm.set_defaults(func=cmd_serve_model)
+
+    ev = sub.add_parser("eval", help="A/B 评测：教师 vs 学生的时延与一致性指标")
+    ev.add_argument("--student", required=True, help="transformers:<模型目录> 或 openai:<url>#<模型>")
+    ev.add_argument("--teacher", required=True, help="教师后端，同 --student 语法")
+    ev.add_argument("--questions", default="3", help="问题数量 / .jsonl 文件 / 单条问题字符串")
+    ev.add_argument("--max-tokens", type=int, default=128)
+    ev.add_argument("--json", action="store_true", help="输出完整 JSON（含逐题样本）")
+    ev.set_defaults(func=cmd_eval)
 
     return p
 

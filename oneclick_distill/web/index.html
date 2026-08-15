@@ -119,12 +119,20 @@
   </div>
 
   <div class="card" style="margin-top:14px">
+    <h2>系统资源实时监控</h2>
+    <canvas id="metricsChart" width="880" height="140" style="width:100%;height:140px"></canvas>
+    <div class="hint" id="metricsText">采样中…</div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
     <h2>A/B 效果对比 Playground</h2>
     <div class="row">
       <input type="text" id="question" style="flex:3" placeholder="输入问题，对比教师模型与蒸馏小模型">
       <button id="askBtn" class="ghost">提问</button>
+      <button id="evalBtn" class="ghost">批量评测</button>
     </div>
     <div id="compare" class="split"></div>
+    <div id="evalResult" class="hint" style="margin-top:10px"></div>
   </div>
 
   <div class="card" style="margin-top:14px">
@@ -134,6 +142,7 @@
       <div class="export" id="exportOllama"><div class="e">🐳</div><div>一键导入 Ollama</div></div>
       <div class="export" id="exportApi"><div class="e">🔌</div><div>启动本地 API 节点</div></div>
     </div>
+    <input type="text" id="ggufPath" style="width:100%;margin-top:10px" placeholder="GGUF 路径（留空用最近一次量化结果）">
     <div id="exportMsg" class="msg"></div>
   </div>
 </div>
@@ -251,12 +260,83 @@ $('#exportOllama').onclick=async()=>{
     $('#exportMsg').textContent='已生成 Modelfile：'+r.command;
   }catch(e){ $('#exportMsg').textContent=e.message; }
 };
-$('#exportApi').onclick=()=>{
-  $('#exportMsg').textContent='本地 API 节点：oneclick-distill serve（OpenAI 兼容 /v1 接口，下一里程碑内置）。';
-};
 
 // ---- server status ----
 api('/api/health').then(()=>$('#serverStatus').textContent='● 服务运行中').catch(()=>$('#serverStatus').textContent='○ 服务未连接');
+
+// ---- system metrics chart ----
+const mPoints=[];
+function drawChart(){
+  const c=$('#metricsChart'), ctx=c.getContext('2d'), W=c.width, H=c.height;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='#2a2f42'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
+  if(mPoints.length<2) return;
+  const step=W/mPoints.length;
+  const draw=(key,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=1.8; ctx.beginPath();
+    mPoints.forEach((p,i)=>{ const y=H-p[key]*H/100; i?ctx.lineTo(i*step,y):ctx.moveTo(0,y); }); ctx.stroke(); };
+  draw('cpu','#22d3ee'); draw('ram','#fbbf24');
+  ctx.fillStyle='#8b93a7'; ctx.font='11px sans-serif';
+  ctx.fillText('CPU %（青）',6,H-8); ctx.fillText('RAM %（黄）',86,H-8);
+}
+async function pollMetrics(){
+  try{
+    const m=await api('/api/metrics');
+    mPoints.push({cpu:m.cpu_percent, ram:(m.ram_used_gb/m.ram_total_gb*100)||0});
+    if(mPoints.length>90) mPoints.shift();
+    $('#metricsText').textContent=`CPU ${m.cpu_percent}% · RAM ${m.ram_used_gb}/${m.ram_total_gb} GB${m.device==='cuda'?(' · VRAM 占用 '+m.vram_used_gb+' GB'):''} · ${m.device==='cuda'?'GPU':'CPU'} 模式`;
+    drawChart();
+  }catch(e){}
+}
+setInterval(pollMetrics,2000);
+
+// ---- local API node (llama.cpp OpenAI-compatible /v1) ----
+let localServer=null;
+async function refreshServer(){
+  try{ const r=await api('/api/server'); localServer=r.servers[0]||null; }
+  catch(e){ localServer=null; }
+  const el=$('#exportMsg');
+  if(localServer){
+    el.textContent=`● 本地 API 节点运行中（${localServer.gguf.split(/[\\\/]/).pop()} · pid ${localServer.pid}）${localServer.healthy?'':' · 健康检查失败'}`;
+    $('#exportApi').innerHTML='<div class="e">⏹</div><div>停止本地 API 节点</div>';
+  }else{
+    el.textContent='';
+    $('#exportApi').innerHTML='<div class="e">🔌</div><div>启动本地 API 节点</div>';
+  }
+}
+$('#exportApi').onclick=async()=>{
+  if(localServer){
+    try{ await api('/api/server/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({port:localServer.port})}); }
+    catch(e){ $('#exportMsg').textContent='停止失败: '+e.message; }
+    await refreshServer();
+    return;
+  }
+  let gguf=$('#ggufPath').value.trim()||latestResult?.gguf;
+  if(!gguf){ $('#exportMsg').textContent='没有量化结果，请在上方输入 GGUF 路径'; return; }
+  try{
+    const r=await api('/api/server/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gguf,port:8123})});
+    $('#exportMsg').textContent=`节点已启动: ${r.base_url}/v1/chat/completions`;
+  }catch(e){ $('#exportMsg').textContent='启动失败: '+e.message; }
+  await refreshServer();
+};
+refreshServer(); setInterval(refreshServer,15000);
+
+// ---- batch A/B evaluation ----
+$('#evalBtn').onclick=async()=>{
+  const q=$('#question').value.trim();
+  if(!q){ $('#evalResult').textContent='先在问题框输入一个问题，然后点批量评测'; return; }
+  if(!latestResult?.model_dir){ $('#evalResult').textContent='没有蒸馏模型，请先完成一次蒸馏任务'; return; }
+  let teacher=null;
+  if(localServer){ teacher=`openai:${localServer.base_url}#${localServer.gguf.split(/[\\\/]/).pop()}`; }
+  if(!teacher){ $('#evalResult').textContent='请先启动本地 API 节点作为教师后端（或用 .env 配置 TEACHER_*）'; return; }
+  $('#evalResult').textContent='评测中，请稍候…（每道题需数秒）';
+  try{
+    const r=await api('/api/eval',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({student:'transformers:'+latestResult.model_dir, teacher, questions:[q], max_tokens:64})});
+    $('#evalResult').innerHTML=
+      `一致性 exact_match=<b>${(r.consistency.exact_match_rate*100).toFixed(0)}%</b> · ROUGE-L F1=<b>${r.consistency.rouge_l_f1}</b> · `+
+      `教师延迟 <b>${r.teacher.avg_ms}ms</b> · 学生延迟 <b>${r.student.avg_ms}ms</b> · 相对加速 <b>${r.relative_speedup_x}x</b>`;
+  }catch(e){ $('#evalResult').textContent='评测失败: '+e.message; }
+};
 </script>
 </body>
 </html>
