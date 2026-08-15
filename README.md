@@ -53,7 +53,7 @@ oneclick-distill pipeline \
 oneclick-distill mcp
 ```
 
-MCP 暴露三个工具：`hardware` / `start_pipeline` / `pipeline_status`。配置示例（Codex / OpenCode / Claude Desktop）：
+MCP 暴露工具：`hardware` / `start_pipeline` / `pipeline_status` / `local_server_start` / `local_server_stop` / `local_server_status` / `evaluate`。配置示例（Codex / OpenCode / Claude Desktop）：
 
 ```json
 {
@@ -71,10 +71,26 @@ Agent 下发的任务会出现在 Web UI 的 **"Agent 托管中"** 横幅中并�
 ## 🗺️ 路线图
 
 - [x] MVP：CLI + FastAPI/WS + 内置 Web UI + MCP + CPU/GPU 双后端
-- [ ] Electron 桌面外壳（三卡片流 + 显存占用图）
-- [ ] Windows / macOS 一键安装包（嵌入式 Python 运行时 + 预编译工具）
-- [ ] llama-server 本地 API 节点（OpenAI 兼容 /v1）
-- [ ] 自动 A/B 评测指标（响应时延、一致性）
+- [x] Electron 桌面外壳（内置 Web UI + 显存占用图）
+- [x] Windows 一键安装包（嵌入式 Python 运行时 + 预编译 llama.cpp 工具）
+- [x] llama-server 本地 API 节点（OpenAI 兼容 /v1）
+- [x] 自动 A/B 评测指标（响应时延、一致性）
+- [ ] macOS / Linux 安装包（electron-builder 打包已在 CI 接入，待平台运行时构建收敛）
+
+### 桌面应用与打包
+
+```bash
+# 构建便携 Python 运行时（Windows）
+powershell -ExecutionPolicy Bypass -File scripts\build_runtime.ps1
+# macOS / Linux
+bash scripts/build_runtime.sh
+
+cd desktop
+npm ci
+npm run dist        # Windows NSIS 安装包（macOS: npx electron-builder --mac dmg；Linux: --linux AppImage）
+```
+
+安装包内置 Python 3.12 + torch(CPU) + 全部依赖 + llama.cpp 工具链，安装后无需联网即可离线使用；静默安装 / 卸载分别对应 `Setup.exe /S /D=<dir>` 与 `Uninstall.exe /S`。
 
 ## 📦 数据格式
 

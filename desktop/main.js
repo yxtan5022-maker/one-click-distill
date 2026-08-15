@@ -42,6 +42,7 @@ function findPython() {
     : [
         path.join(process.resourcesPath, "runtime", "python", "python.exe"),
         path.join(process.resourcesPath, "runtime", "python", "bin", "python3"),
+        path.join(process.resourcesPath, "runtime", "python", "bin", "python3.12"),
       ];
   for (const c of candidates) if (fs.existsSync(c)) return c;
   return null;

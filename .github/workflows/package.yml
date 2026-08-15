@@ -1,0 +1,82 @@
+name: package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    name: ${{ matrix.os }} (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: nsis
+            script: powershell -ExecutionPolicy Bypass -File scripts/build_runtime.ps1
+          - os: macos-latest
+            target: mac
+            script: bash scripts/build_runtime.sh
+          - os: ubuntu-latest
+            target: linux
+            script: bash scripts/build_runtime.sh
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: npm ci
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build portable python runtime
+        run: ${{ matrix.script }}
+
+      - name: Package desktop app
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          ARCH=$(node -p "process.arch === 'arm64' ? '--arm64' : '--x64'")
+          if [ "${{ matrix.target }}" = "nsis" ]; then
+            npx electron-builder --win nsis $ARCH --publish never
+          elif [ "${{ matrix.target }}" = "mac" ]; then
+            npx electron-builder --mac dmg $ARCH --publish never
+          else
+            npx electron-builder --linux AppImage $ARCH --publish never
+          fi
+
+      - name: Smoke test packaged app (headless)
+        if: runner.os == 'Windows'
+        run: |
+          $exe = Get-ChildItem desktop/dist/*.exe | Select-Object -First 1
+          $dir = "$env:RUNNER_TEMP\ocd_smoke"
+          Start-Process -FilePath $exe.FullName -ArgumentList "/S", "/D=$dir" -Wait
+          $shot = "$env:RUNNER_TEMP\ocd_shell.png"
+          $app = Join-Path $dir 'OneClick Distill.exe'
+          Start-Process -FilePath $app -ArgumentList "--screenshot", $shot -Wait
+          if (-not (Test-Path $shot)) { throw "no screenshot from installed app" }
+          Write-Host "smoke ok, screenshot $((Get-Item $shot).Length) bytes"
+          Start-Process -FilePath (Join-Path $dir 'Uninstall OneClick Distill.exe') -ArgumentList "/S" -Wait
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.os }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.AppImage
+            desktop/dist/*.zip
+            desktop/dist/*.blockmap
+          if-no-files-found: warn

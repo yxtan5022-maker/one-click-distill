@@ -86,7 +86,8 @@ class Settings:
 
     @property
     def tools_dir(self) -> Path:
-        return DEFAULT_TOOLS_DIR
+        p = os.environ.get("OCD_TOOLS_DIR")
+        return Path(p) if p else DEFAULT_TOOLS_DIR
 
     @property
     def llama_quantize(self) -> Path | None:
