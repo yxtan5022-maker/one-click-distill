@@ -1,0 +1,35 @@
+{
+  "name": "oneclick-distill-desktop",
+  "productName": "OneClick Distill",
+  "version": "0.1.0",
+  "description": "OneClick Distill desktop shell — one-click model distillation for everyone",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "screenshot": "electron . --screenshot",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ai.oneclick.distill",
+    "productName": "OneClick Distill",
+    "directories": { "output": "dist" },
+    "files": ["main.js", "preload.js", "package.json"],
+    "extraResources": [
+      { "from": "../server_launcher.py", "to": "runtime/launcher.py" },
+      { "from": "runtime", "to": "runtime", "filter": ["**/*"] }
+    ],
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true
+    }
+  }
+}
