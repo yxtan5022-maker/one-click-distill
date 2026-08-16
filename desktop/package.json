@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "screenshot": "electron . --screenshot",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "dist:zip": "electron-builder --win zip"
   },
   "devDependencies": {
     "electron": "^33.2.0",

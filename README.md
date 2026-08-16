@@ -89,9 +89,19 @@ bash scripts/build_runtime.sh
 cd desktop
 npm ci
 npm run dist        # Windows NSIS 安装包（macOS: npx electron-builder --mac dmg；Linux: --linux AppImage）
+npm run dist:zip    # Windows 免安装 zip（解压即用，推荐：比 NSIS 安装快约 10 倍）
 ```
 
 安装包内置 Python 3.12 + torch(CPU) + 全部依赖 + llama.cpp 工具链，安装后无需联网即可离线使用；静默安装 / 卸载分别对应 `Setup.exe /S /D=<dir>` 与 `Uninstall.exe /S`。
+
+**Windows 分发两种形态**：
+
+| 形态 | 命令 | 用户操作 | 实测耗时 |
+|---|---|---|---|
+| NSIS 安装包（`Setup.exe`） | `npm run dist` | 双击安装 | ~14 分钟 |
+| 免安装 zip | `npm run dist:zip` | 解压后双击 `OneClick Distill.exe` | 解压 ~1 分钟 + 启动 ~6 秒 |
+
+zip 体积更大（约 330MB vs 245MB），但无需安装步骤、可任意位置运行、删目录即卸载，适合想快速上手或不想改注册表的用户。
 
 ## 📦 数据格式
 
