@@ -92,7 +92,8 @@ def cmd_pipeline(args) -> int:
     )
     if args.teacher == "none":
         teacher = TeacherConfig(name="none")
-    spec = JobSpec(
+
+    spec_kwargs = dict(
         source=args.source,
         data_paths=args.data,
         teacher=teacher,
@@ -103,7 +104,35 @@ def cmd_pipeline(args) -> int:
         dry_run=args.dry_run,
         quantize=args.quantize,
         out_dir=args.out_dir,
+        task=args.task,
+        labels_csv=args.labels_csv or "",
+        image_dir=args.image_dir or "",
+        reports_csv=args.reports_csv or "",
+        series_csv=args.series_csv or "",
+        teacher_backbone=args.teacher_backbone or "",
+        student_arch=args.student_arch or "",
+        n_folds=args.n_folds,
+        seed=args.seed,
+        export_format=args.export_format,
     )
+    spec = JobSpec(**spec_kwargs)
+
+    if spec.task == "vision-classify":
+        from .schema import make_progress_cb
+        from .vision.pipeline import run_vision_pipeline
+        state: dict = {"status": "running", "stage": "prepare", "progress": 0.0, "message": "start"}
+        try:
+            result = run_vision_pipeline(spec, _progress_cb(state))
+            state.update(status="done", progress=1.0, message="vision-classify 完成")
+            _print_json(state)
+            _print_json(result)
+            return 0
+        except Exception as e:
+            state.update(status="failed", message=str(e), error=str(e))
+            _print_json(state)
+            print(f"失败: {e}", file=sys.stderr)
+            return 1
+
     state: dict = {"status": "running", "stage": "prepare", "progress": 0.0, "message": "start"}
     try:
         result = run_pipeline(spec, _progress_cb(state))
@@ -228,6 +257,8 @@ def build_parser() -> argparse.ArgumentParser:
     doc.set_defaults(func=cmd_doctor)
 
     pipe = sub.add_parser("pipeline", help="运行完整蒸馏流程")
+    pipe.add_argument("--task", default="llm", choices=["llm", "vision-classify"],
+                      help="任务类型：llm 或 vision-classify")
     pipe.add_argument("--data", nargs="*", default=[], help="数据文件/目录（.txt/.md/.json/.jsonl/.pdf）")
     pipe.add_argument("--teacher", default="none", choices=["none", "deepseek", "openai", "local"],
                       help="教师模型（用于合成数据）")
@@ -242,6 +273,17 @@ def build_parser() -> argparse.ArgumentParser:
     pipe.add_argument("--no-quantize", action="store_true", help="跳过 GGUF 导出")
     pipe.add_argument("--out-dir", default="", help="输出目录")
     pipe.add_argument("--source", default="cli", help="任务来源标记（cli/mcp/ui）")
+    pipe.add_argument("--labels-csv", default="", help="[vision] 标签 CSV 路径")
+    pipe.add_argument("--image-dir", default="", help="[vision] DICOM 图像根目录")
+    pipe.add_argument("--reports-csv", default="", help="[vision] 报告 CSV 路径")
+    pipe.add_argument("--series-csv", default="", help="[vision] 系列描述 CSV")
+    pipe.add_argument("--teacher-backbone", default="", help="[vision] 教师骨干（如 convnext_base）")
+    pipe.add_argument("--student-arch", default="", help="[vision] 学生架构（如 efficientnet_b0）")
+    pipe.add_argument("--n-folds", type=int, default=5, help="[vision] GroupKFold 折数")
+    pipe.add_argument("--seed", type=int, default=42, help="随机种子")
+    pipe.add_argument("--export-format", default="torchscript",
+                      choices=["torchscript", "onnx", "onnx_int8"],
+                      help="[vision] 导出格式")
     pipe.set_defaults(func=cmd_pipeline)
 
     demo = sub.add_parser("demo", help="一键演示：内置数据跑通冒烟流程")

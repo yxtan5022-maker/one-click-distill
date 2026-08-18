@@ -3,339 +3,534 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OneClick Distill — 一键模型蒸馏</title>
+<title>OneClick Distill</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg:#0f1117; --card:#171a24; --card2:#1d2130; --line:#2a2f42; --text:#e6e8ef;
-    --dim:#8b93a7; --acc:#6366f1; --acc2:#22d3ee; --ok:#34d399; --warn:#fbbf24; --err:#f87171;
-  }
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;min-height:100vh}
-  .wrap{max-width:960px;margin:0 auto;padding:24px 16px 80px}
-  header{display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--line)}
-  .logo{font-size:20px;font-weight:700}
-  .logo span{color:var(--acc2)}
-  .agent-banner{display:none;align-items:center;gap:10px;background:linear-gradient(90deg,#312e81,#164e63);
-    border:1px solid #4f46e5;border-radius:10px;padding:10px 14px;margin:14px 0;font-size:14px}
-  .agent-banner.show{display:flex}
-  .dot{width:9px;height:9px;border-radius:50%;background:var(--acc2);animation:pulse 1.2s infinite}
-  @keyframes pulse{50%{opacity:.35}}
-  .steps{display:grid;gap:14px;margin-top:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .card h2{font-size:15px;margin-bottom:12px;color:var(--dim);font-weight:600}
-  .card h2 b{color:var(--text)}
-  .drop{border:2px dashed var(--line);border-radius:10px;padding:22px;text-align:center;color:var(--dim);cursor:pointer}
-  .drop.hover{border-color:var(--acc2);color:var(--text)}
-  .filelist{list-style:none;margin-top:10px;font-size:13px}
-  .filelist li{background:var(--card2);padding:6px 10px;border-radius:8px;margin-top:6px;display:flex;justify-content:space-between}
-  .row{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
-  .chip{background:var(--card2);border:1px solid var(--line);color:var(--dim);border-radius:10px;padding:12px 14px;cursor:pointer;flex:1;min-width:180px}
-  .chip.active{border-color:var(--acc2);color:var(--text)}
-  .chip .t{font-weight:600;color:var(--text)}
-  .chip .d{font-size:12px;margin-top:4px}
-  select,button,input[type=text],textarea{background:var(--card2);border:1px solid var(--line);color:var(--text);
-    border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit}
-  button{cursor:pointer}
-  button.primary{background:linear-gradient(90deg,#6366f1,#22d3ee);border:none;color:#fff;font-weight:700;padding:12px 22px}
-  button.primary:disabled{opacity:.5;cursor:not-allowed}
-  button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
-  .hw{background:var(--card2);border-radius:10px;padding:12px;font-size:13px;margin-top:12px;display:none;line-height:1.8}
-  .hw.show{display:block}
-  .hw .ok{color:var(--ok)} .hw .warn{color:var(--warn)}
-  .progress{margin-top:12px;display:none}
-  .progress.show{display:block}
-  .stage{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--dim)}
-  .stage .bar{flex:1;height:6px;background:var(--card2);border-radius:4px;overflow:hidden}
-  .stage .fill{height:100%;width:0;background:linear-gradient(90deg,#6366f1,#22d3ee);transition:width .3s}
-  .log{margin-top:10px;max-height:160px;overflow-y:auto;font-family:Consolas,monospace;font-size:12px;
-    background:#0a0c12;border:1px solid var(--line);border-radius:8px;padding:10px;color:var(--dim)}
-  .log div.agent{color:var(--acc2)}
-  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
-  @media(max-width:700px){.split{grid-template-columns:1fr}}
-  .qa{background:var(--card2);border-radius:10px;padding:12px}
-  .qa h3{font-size:13px;color:var(--dim);margin-bottom:8px}
-  .qa .ans{font-size:14px;line-height:1.7;white-space:pre-wrap}
-  .qa .meta{font-size:12px;color:var(--dim);margin-top:8px}
-  .exports{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
-  @media(max-width:700px){.exports{grid-template-columns:1fr}}
-  .export{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:center;cursor:pointer}
-  .export:hover{border-color:var(--acc2)}
-  .export .e{font-size:22px}
-  .hint{font-size:12px;color:var(--dim);margin-top:8px}
-  .msg{font-size:12px;color:var(--err);margin-top:8px}
+:root {
+  --bg: #0c0a09; --surface: #1c1917; --card: #292524; --border: #44403c;
+  --text: #fafaf9; --muted: #a8a29e; --dim: #78716c;
+  --violet: #c084fc; --violet-dim: #9333ea; --teal: #34d399; --amber: #fbbf24; --rose: #fb7185;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; line-height: 1.5; }
+
+/* --- layout --- */
+.wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 100px; }
+header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.logo { font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.logo em { font-style: normal; color: var(--violet); }
+.status { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+.status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+.status.off::before { background: var(--rose); }
+
+/* --- mode toggle --- */
+.mode-bar { display: flex; justify-content: flex-end; margin: 20px 0 0; }
+.mode-pill { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.mode-pill button { padding: 6px 16px; font-size: 12px; font-weight: 600; border: none; background: transparent; color: var(--muted); cursor: pointer; transition: all .2s; font-family: inherit; }
+.mode-pill button.on { background: var(--violet); color: #fff; }
+
+/* --- sections --- */
+.flow { margin-top: 28px; display: flex; flex-direction: column; gap: 0; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; }
+.section + .section { margin-top: 12px; }
+.section-label { font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; color: var(--violet); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+.section-title { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.section-desc { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+
+/* --- flow connector --- */
+.connector { height: 24px; display: flex; align-items: center; justify-content: center; }
+.connector::before { content: ''; width: 1px; height: 100%; background: linear-gradient(180deg, var(--border), var(--violet), var(--border)); }
+
+/* --- drop zone --- */
+.drop { border: 2px dashed var(--border); border-radius: 10px; padding: 28px; text-align: center; cursor: pointer; transition: all .25s; }
+.drop:hover, .drop.hover { border-color: var(--violet); background: rgba(192,132,252,.04); }
+.drop-icon { font-size: 28px; margin-bottom: 6px; opacity: .5; }
+.drop-text { font-size: 14px; color: var(--muted); }
+.drop-text strong { color: var(--text); }
+.filelist { list-style: none; margin-top: 10px; }
+.filelist li { background: var(--card); padding: 8px 12px; border-radius: 8px; margin-top: 6px; display: flex; justify-content: space-between; font-size: 13px; }
+.filelist li span:last-child { color: var(--dim); }
+
+/* --- model grid --- */
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.model-card { background: var(--card); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; cursor: pointer; transition: all .2s; position: relative; }
+.model-card:hover { border-color: var(--dim); }
+.model-card.active { border-color: var(--violet); background: rgba(192,132,252,.06); }
+.model-card .mc-name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 15px; }
+.model-card .mc-meta { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.model-card .mc-ram { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+.mc-ram.fit { background: rgba(52,211,153,.15); color: var(--teal); }
+.mc-ram.tight { background: rgba(251,191,36,.15); color: var(--amber); }
+.mc-ram.nope { background: rgba(251,113,133,.15); color: var(--rose); }
+.model-card .mc-badge { position: absolute; top: 10px; right: 12px; font-size: 11px; color: var(--dim); }
+
+/* --- teacher --- */
+select, input[type=text], textarea {
+  background: var(--card); border: 1px solid var(--border); color: var(--text);
+  border-radius: 10px; padding: 10px 12px; font-size: 14px; font-family: inherit; width: 100%;
+}
+select { cursor: pointer; }
+.pro-only { display: none; }
+body.pro .pro-only { display: block !important; }
+body.pro .pro-only-flex { display: flex !important; }
+
+/* --- buttons --- */
+.btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+button.primary {
+  background: linear-gradient(135deg, var(--violet-dim), var(--violet));
+  border: none; color: #fff; font-weight: 600; font-size: 15px; padding: 12px 28px;
+  border-radius: 10px; cursor: pointer; font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -0.2px; transition: transform .1s, box-shadow .2s;
+}
+button.primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(192,132,252,.3); }
+button.primary:active { transform: translateY(0); }
+button.primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+button.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 10px 16px; border-radius: 10px; font-size: 13px; cursor: pointer; font-family: inherit; transition: border-color .2s; }
+button.ghost:hover { border-color: var(--dim); color: var(--text); }
+.hint { font-size: 12px; color: var(--dim); }
+
+/* --- hw info --- */
+.hw { background: var(--card); border-radius: 10px; padding: 14px; font-size: 13px; margin-top: 12px; display: none; line-height: 1.8; color: var(--muted); }
+.hw.show { display: block; }
+.hw b { color: var(--text); }
+.hw .ok { color: var(--teal); } .hw .warn { color: var(--amber); }
+
+/* --- progress --- */
+.progress { margin-top: 16px; display: none; }
+.progress.show { display: block; }
+.stages { display: flex; gap: 4px; margin-bottom: 12px; }
+.stages .st { flex: 1; height: 3px; background: var(--card); border-radius: 2px; overflow: hidden; }
+.stages .st .fill { height: 100%; width: 0; background: var(--violet); transition: width .4s; border-radius: 2px; }
+.stages .st.done .fill { width: 100%; background: var(--teal); }
+.stage-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); margin-bottom: 4px; }
+.stage-labels span.active { color: var(--violet); font-weight: 600; }
+.log { max-height: 140px; overflow-y: auto; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 11px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--dim); margin-top: 10px; }
+.log div.agent { color: var(--violet); }
+
+/* --- metrics --- */
+.metrics-bar { display: flex; gap: 16px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.metrics-bar .m-val { font-weight: 600; color: var(--text); }
+canvas { display: none; }
+
+/* --- playground --- */
+.playground { margin-top: 12px; }
+.pg-input { display: flex; gap: 8px; }
+.pg-input input { flex: 1; }
+.pg-results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+@media (max-width: 600px) { .pg-results { grid-template-columns: 1fr; } }
+.pg-card { background: var(--card); border-radius: 10px; padding: 14px; }
+.pg-card h4 { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 500; }
+.pg-card .ans { font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.pg-card .meta { font-size: 11px; color: var(--dim); margin-top: 8px; }
+
+/* --- export --- */
+.export-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+@media (max-width: 600px) { .export-grid { grid-template-columns: 1fr; } }
+.export-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; text-align: center; cursor: pointer; transition: all .2s; }
+.export-card:hover { border-color: var(--violet); }
+.export-card .ec-icon { font-size: 24px; margin-bottom: 6px; }
+.export-card .ec-label { font-size: 13px; font-weight: 500; }
+.export-card .ec-desc { font-size: 11px; color: var(--dim); margin-top: 4px; }
+.export-msg { font-size: 12px; color: var(--rose); margin-top: 10px; min-height: 18px; }
+
+/* --- agent banner --- */
+.agent-banner { display: none; align-items: center; gap: 10px; background: linear-gradient(90deg, rgba(192,132,252,.1), rgba(52,211,153,.05));
+  border: 1px solid rgba(192,132,252,.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 13px; color: var(--muted); }
+.agent-banner.show { display: flex; }
+.agent-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--violet); animation: pulse 1.2s infinite; flex-shrink: 0; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+/* --- scrollbar --- */
+::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* --- checkbox --- */
+.check-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.check-label input { accent-color: var(--violet); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="logo">OneClick <span>Distill</span></div>
-    <div id="serverStatus" style="font-size:12px;color:var(--dim)">连接中…</div>
+    <div class="logo">OneClick <em>Distill</em></div>
+    <div id="status" class="status off">connecting</div>
   </header>
 
-  <div id="agentBanner" class="agent-banner">
-    <div class="dot"></div>
-    <div><b>Agent 托管中</b> — 任务由外部 AI 工具（CLI/MCP）下发，后台静默执行，界面实时同步。</div>
+  <div class="mode-bar">
+    <div class="mode-pill">
+      <button id="modeSimple" class="on" onclick="setMode(false)">Simple</button>
+      <button id="modePro" onclick="setMode(true)">Pro</button>
+    </div>
   </div>
 
-  <div class="steps">
-    <div class="card">
-      <h2><b>①</b> 导入素材 &amp; 选教师模型</h2>
-      <div id="drop" class="drop">拖拽 TXT / PDF / Markdown / JSON 到这里，或点击选择</div>
+  <div id="agentBanner" class="agent-banner">
+    <div class="agent-dot"></div>
+    <div>Task managed by external AI agent — running in background, this view syncs in real time.</div>
+  </div>
+
+  <div class="flow">
+    <!-- 1: Data -->
+    <div class="section">
+      <div class="section-label">Data</div>
+      <div class="section-title">Import training material</div>
+      <div class="section-desc">Drop your files, or choose a teacher model to generate synthetic data.</div>
+      <div id="drop" class="drop">
+        <div class="drop-icon">+</div>
+        <div class="drop-text">Drag <strong>TXT / PDF / MD / JSON</strong> here, or click to browse</div>
+      </div>
       <input type="file" id="fileInput" multiple style="display:none">
       <ul id="fileList" class="filelist"></ul>
-      <div class="row">
+
+      <div class="pro-only" style="margin-top:14px">
+        <label style="font-size:12px;color:var(--dim);display:block;margin-bottom:6px">Teacher model (synthetic data)</label>
         <select id="teacher">
-          <option value="none">不使用教师模型（直接用问答数据）</option>
-          <option value="deepseek">DeepSeek（合成数据）</option>
-          <option value="openai">OpenAI（合成数据）</option>
-          <option value="local">本地 Ollama（合成数据）</option>
+          <option value="none">None — use uploaded Q&A data directly</option>
+          <option value="deepseek">DeepSeek (API, generates synthetic data)</option>
+          <option value="openai">OpenAI (API, generates synthetic data)</option>
+          <option value="local">Local Ollama (generates synthetic data)</option>
         </select>
       </div>
     </div>
 
-    <div class="card">
-      <h2><b>②</b> 目标规格 &amp; 硬件自检</h2>
-      <div class="row">
-        <div class="chip active" data-size="ultra"><div class="t">极速版 0.5B</div><div class="d">快 · 省资源 · 适合普通电脑</div></div>
-        <div class="chip" data-size="balanced"><div class="t">平衡版 3B</div><div class="d">更强 · 需要更好显卡</div></div>
+    <div class="connector"></div>
+
+    <!-- 2: Target -->
+    <div class="section">
+      <div class="section-label">Target</div>
+      <div class="section-title">Choose model size</div>
+      <div class="section-desc">Select the size that fits your hardware. Green means it fits comfortably in your RAM.</div>
+      <div id="modelGrid" class="model-grid">
+        <div class="model-card active" data-size="ultra" data-ram="1.2">
+          <div class="mc-name">0.5B</div>
+          <div class="mc-meta"><span>Ultra fast</span><span class="mc-ram fit">~1.2 GB</span></div>
+        </div>
+        <div class="model-card" data-size="tiny" data-ram="2.0">
+          <div class="mc-name">1.5B</div>
+          <div class="mc-meta"><span>Tiny</span><span class="mc-ram fit">~2.0 GB</span></div>
+        </div>
+        <div class="model-card" data-size="small" data-ram="3.5">
+          <div class="mc-name">3B</div>
+          <div class="mc-meta"><span>Small</span><span class="mc-ram fit">~3.5 GB</span></div>
+        </div>
+        <div class="model-card" data-size="balanced" data-ram="5.0">
+          <div class="mc-name">7B</div>
+          <div class="mc-meta"><span>Balanced</span><span class="mc-ram fit">~5.0 GB</span></div>
+        </div>
+        <div class="model-card" data-size="medium" data-ram="8.5">
+          <div class="mc-name">13B</div>
+          <div class="mc-meta"><span>Medium</span><span class="mc-ram tight">~8.5 GB</span></div>
+        </div>
+        <div class="model-card" data-size="large" data-ram="14.0">
+          <div class="mc-name">30B</div>
+          <div class="mc-meta"><span>Large</span><span class="mc-ram nope">~14 GB</span></div>
+        </div>
       </div>
       <div id="hwInfo" class="hw"></div>
+
+      <div class="pro-only" style="margin-top:14px">
+        <label style="font-size:12px;color:var(--dim);display:block;margin-bottom:6px">Quantization format</label>
+        <select id="quantFmt">
+          <option value="q4_k_m">Q4_K_M (recommended — size vs quality balance)</option>
+          <option value="q8_0">Q8_0 (higher quality, larger file)</option>
+          <option value="q5_k_m">Q5_K_M (middle ground)</option>
+          <option value="q3_k_s">Q3_K_S (smallest, lower quality)</option>
+          <option value="f16">F16 (no quantization, full half precision)</option>
+        </select>
+      </div>
     </div>
 
-    <div class="card">
-      <h2><b>③</b> 启动蒸馏 &amp; 实时监控</h2>
-      <div class="row">
-        <button id="startBtn" class="primary">开始蒸馏</button>
-        <label class="hint" style="margin:0"><input type="checkbox" id="skipQ"> 跳过 GGUF 导出</label>
+    <div class="connector"></div>
+
+    <!-- 3: Run -->
+    <div class="section">
+      <div class="section-label">Run</div>
+      <div class="section-title">Start distillation</div>
+      <div class="btn-row">
+        <button id="startBtn" class="primary">Start</button>
+        <label class="check-label"><input type="checkbox" id="skipQ"> Skip GGUF export</label>
       </div>
       <div id="progress" class="progress">
-        <div id="stage0" class="stage"><span>初始化</span><div class="bar"><div class="fill"></div></div></div>
-        <div id="stage1" class="stage"><span>数据合成</span><div class="bar"><div class="fill"></div></div></div>
-        <div id="stage2" class="stage"><span>微调训练</span><div class="bar"><div class="fill"></div></div></div>
-        <div id="stage3" class="stage"><span>量化导出</span><div class="bar"><div class="fill"></div></div></div>
+        <div class="stage-labels">
+          <span id="sl0">Prepare</span><span id="sl1">Data</span><span id="sl2">Train</span><span id="sl3">Export</span>
+        </div>
+        <div class="stages">
+          <div class="st" id="s0"><div class="fill"></div></div>
+          <div class="st" id="s1"><div class="fill"></div></div>
+          <div class="st" id="s2"><div class="fill"></div></div>
+          <div class="st" id="s3"><div class="fill"></div></div>
+        </div>
         <div id="log" class="log"></div>
       </div>
     </div>
-  </div>
 
-  <div class="card" style="margin-top:14px">
-    <h2>系统资源实时监控</h2>
-    <canvas id="metricsChart" width="880" height="140" style="width:100%;height:140px"></canvas>
-    <div class="hint" id="metricsText">采样中…</div>
-  </div>
-
-  <div class="card" style="margin-top:14px">
-    <h2>A/B 效果对比 Playground</h2>
-    <div class="row">
-      <input type="text" id="question" style="flex:3" placeholder="输入问题，对比教师模型与蒸馏小模型">
-      <button id="askBtn" class="ghost">提问</button>
-      <button id="evalBtn" class="ghost">批量评测</button>
+    <!-- 4: Metrics -->
+    <div class="section">
+      <div class="section-label">Monitor</div>
+      <div class="section-title">System resources</div>
+      <canvas id="metricsChart" width="740" height="100"></canvas>
+      <div class="metrics-bar" id="metricsBar">
+        <span>CPU <span class="m-val" id="mCpu">—</span></span>
+        <span>RAM <span class="m-val" id="mRam">—</span></span>
+        <span id="mGpuWrap" style="display:none">GPU <span class="m-val" id="mGpu">—</span></span>
+      </div>
     </div>
-    <div id="compare" class="split"></div>
-    <div id="evalResult" class="hint" style="margin-top:10px"></div>
-  </div>
 
-  <div class="card" style="margin-top:14px">
-    <h2>一键分发</h2>
-    <div class="exports">
-      <div class="export" id="exportGguf"><div class="e">⬇️</div><div>导出 .gguf 文件</div></div>
-      <div class="export" id="exportOllama"><div class="e">🐳</div><div>一键导入 Ollama</div></div>
-      <div class="export" id="exportApi"><div class="e">🔌</div><div>启动本地 API 节点</div></div>
+    <!-- 5: Playground -->
+    <div class="section pro-only">
+      <div class="section-label">Compare</div>
+      <div class="section-title">A/B Playground</div>
+      <div class="pg-input">
+        <input type="text" id="question" placeholder="Ask a question to compare teacher vs student">
+        <button class="ghost" id="askBtn">Ask</button>
+        <button class="ghost" id="evalBtn">Batch eval</button>
+      </div>
+      <div id="compare" class="pg-results"></div>
+      <div id="evalResult" class="hint" style="margin-top:10px"></div>
     </div>
-    <input type="text" id="ggufPath" style="width:100%;margin-top:10px" placeholder="GGUF 路径（留空用最近一次量化结果）">
-    <div id="exportMsg" class="msg"></div>
+
+    <!-- 6: Export -->
+    <div class="section">
+      <div class="section-label">Export</div>
+      <div class="section-title">Use your model</div>
+      <div class="export-grid">
+        <div class="export-card" id="exportGguf">
+          <div class="ec-icon">📦</div>
+          <div class="ec-label">Download .gguf</div>
+          <div class="ec-desc">Universal format for llama.cpp</div>
+        </div>
+        <div class="export-card" id="exportOllama">
+          <div class="ec-icon">🦙</div>
+          <div class="ec-label">Import to Ollama</div>
+          <div class="ec-desc">One-click model import</div>
+        </div>
+        <div class="export-card" id="exportApi">
+          <div class="ec-icon">⚡</div>
+          <div class="ec-label">Start API server</div>
+          <div class="ec-desc">OpenAI-compatible /v1 endpoint</div>
+        </div>
+      </div>
+      <input type="text" id="ggufPath" placeholder="GGUF path (leave empty to use latest quantization result)" style="margin-top:10px">
+      <div id="exportMsg" class="export-msg"></div>
+    </div>
   </div>
 </div>
 
 <script>
-const $=s=>document.querySelector(s);
-let files=[], currentJob=null, latestResult=null, hw=null, ws=null;
+const $ = s => document.querySelector(s);
+let files = [], currentJob = null, latestResult = null, hw = null, ws = null;
+let proMode = false;
 
-async function api(path, opts){ const r=await fetch(path, opts); if(!r.ok){ let e=await r.json().catch(()=>({})); throw new Error(e.error||('HTTP '+r.status)); } return r.json(); }
+function setMode(pro) {
+  proMode = pro;
+  document.body.classList.toggle('pro', pro);
+  $('#modeSimple').classList.toggle('on', !pro);
+  $('#modePro').classList.toggle('on', pro);
+}
 
-async function checkHardware(){
-  try{
-    hw=await api('/api/hardware');
-    const s=hw.strategy, el=$('#hwInfo');
-    const lines=[
-      `<b>${hw.device_name}</b>（${hw.device==='cuda'?('显存可用 '+hw.free_vram_gb+' GB'):'CPU 模式'} · 内存 ${hw.free_ram_gb} GB · 磁盘 ${hw.disk_free_gb} GB）`,
-      ...s.notes.map(n=>`<div class="${n.includes('降级')||n.includes('紧张')?'warn':'ok'}">• ${n}</div>`),
-      `<div class="hint">后端 ${s.backend} · 量化 ${s.quantized} · batch=${s.batch_size} · grad_accum=${s.grad_accumulation_steps} · max_seq=${s.max_seq_len}</div>`
-    ];
-    el.innerHTML=lines.join('');
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || ('HTTP ' + r.status)); }
+  return r.json();
+}
+
+// --- hardware ---
+async function checkHardware() {
+  try {
+    hw = await api('/api/hardware');
+    const s = hw.strategy, el = $('#hwInfo');
+    const ramGB = hw.free_ram_gb;
+    document.querySelectorAll('.model-card').forEach(c => {
+      const need = parseFloat(c.dataset.ram);
+      const badge = c.querySelector('.mc-ram');
+      if (need <= ramGB * 0.8) { badge.className = 'mc-ram fit'; }
+      else if (need <= ramGB) { badge.className = 'mc-ram tight'; }
+      else { badge.className = 'mc-ram nope'; }
+    });
+    el.innerHTML = `<b>${hw.device_name}</b> — ${hw.device === 'cuda' ? ('VRAM ' + hw.free_vram_gb + ' GB') : 'CPU mode'} · RAM ${hw.free_ram_gb} GB · Disk ${hw.disk_free_gb} GB<br>` +
+      s.notes.map(n => `<div class="${n.includes('降级') || n.includes('紧张') || n.includes('tight') || n.includes('low') ? 'warn' : 'ok'}">${n}</div>`).join('') +
+      `<div class="hint" style="margin-top:6px">Backend: ${s.backend} · Quantization: ${s.quantized} · batch=${s.batch_size} · seq=${s.max_seq_len}</div>`;
     el.classList.add('show');
-  }catch(e){}
+  } catch (e) {}
 }
 checkHardware();
 setInterval(checkHardware, 15000);
 
-// ---- files ----
-const drop=$('#drop');
-drop.onclick=()=>$('#fileInput').click();
-$('#fileInput').onchange=e=>upload(e.target.files);
-drop.ondragover=e=>{e.preventDefault();drop.classList.add('hover')};
-drop.ondragleave=()=>drop.classList.remove('hover');
-drop.ondrop=e=>{e.preventDefault();drop.classList.remove('hover');upload(e.dataTransfer.files)};
-async function upload(list){
-  for(const f of list){
-    const fd=new FormData(); fd.append('file',f);
-    try{ const r=await api('/api/files',{method:'POST',body:fd}); files.push(r.path);
-      $('#fileList').insertAdjacentHTML('beforeend',`<li><span>${r.name}</span><span>${(r.size/1024).toFixed(0)} KB</span></li>`);
-    }catch(e){ alert('上传失败: '+e.message); }
+// --- files ---
+const drop = $('#drop');
+drop.onclick = () => $('#fileInput').click();
+$('#fileInput').onchange = e => upload(e.target.files);
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('hover'); };
+drop.ondragleave = () => drop.classList.remove('hover');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('hover'); upload(e.dataTransfer.files); };
+async function upload(list) {
+  for (const f of list) {
+    const fd = new FormData(); fd.append('file', f);
+    try {
+      const r = await api('/api/files', { method: 'POST', body: fd }); files.push(r.path);
+      $('#fileList').insertAdjacentHTML('beforeend', `<li><span>${r.name}</span><span>${(r.size / 1024).toFixed(0)} KB</span></li>`);
+    } catch (e) { alert('Upload failed: ' + e.message); }
   }
 }
 
-// ---- size chips ----
-document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
-  document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+// --- model cards ---
+document.querySelectorAll('.model-card').forEach(c => c.onclick = () => {
+  document.querySelectorAll('.model-card').forEach(x => x.classList.remove('active'));
   c.classList.add('active');
 });
 
-function stageFill(stage,val){ const el=document.getElementById('stage'+stage); if(el) el.querySelector('.fill').style.width=(val*100)+'%'; }
+// --- progress ---
+function stageFill(i, v) { const el = $('#s' + i); if (el) el.querySelector('.fill').style.width = (v * 100) + '%'; }
+function stageDone(i) { const el = $('#s' + i); if (el) el.classList.add('done'); }
+function logLine(msg, agent) {
+  const d = document.createElement('div');
+  if (agent) d.className = 'agent';
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + (agent ? '> ' : '') + msg;
+  $('#log').appendChild(d);
+  $('#log').scrollTop = $('#log').scrollHeight;
+}
+function mapStage(s) { return { prepare: 0, data: 0, synthetic: 1, train: 2, quantize: 3 }[s] ?? 0; }
 
-function logLine(msg,agent){ const d=document.createElement('div'); if(agent)d.className='agent'; d.textContent='['+new Date().toLocaleTimeString()+'] '+(agent?'🤖 ':'')+msg; $('#log').appendChild(d); $('#log').scrollTop=$('#log').scrollHeight; }
-
-function mapStageToIndex(stage){ return {prepare:0,data:0,synthetic:1,train:2,quantize:3}[stage] ?? 0; }
-
-// ---- start job ----
-$('#startBtn').onclick=async()=>{
-  if(files.length===0 && $('#teacher').value==='none'){
-    alert('请先拖入数据文件，或选择教师模型合成数据');
+// --- start ---
+$('#startBtn').onclick = async () => {
+  if (files.length === 0 && $('#teacher').value === 'none') {
+    alert('Upload data files first, or select a teacher model.');
     return;
   }
-  const size=document.querySelector('.chip.active').dataset.size;
-  const body={source:'ui',size,quantize:!$('#skipQ').checked,
-    teacher:{name:$('#teacher').value,model:'',base_url:'',api_key:''},
-    data_paths:files};
-  $('#startBtn').disabled=true;
+  const size = document.querySelector('.model-card.active').dataset.size;
+  const body = {
+    source: 'ui', size, quantize: !$('#skipQ').checked,
+    teacher: { name: $('#teacher').value, model: '', base_url: '', api_key: '' },
+    data_paths: files
+  };
+  $('#startBtn').disabled = true;
   $('#progress').classList.add('show');
-  try{
-    const job=await api('/api/jobs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    currentJob=job.id;
+  try {
+    const job = await api('/api/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    currentJob = job.id;
     connectWS(job.id);
-  }catch(e){ logLine('提交失败: '+e.message); $('#startBtn').disabled=false; }
+  } catch (e) { logLine('Submit failed: ' + e.message); $('#startBtn').disabled = false; }
 };
 
-function connectWS(jobId){
-  if(ws) ws.close();
-  const proto=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(`${proto}://${location.host}/ws/jobs/${jobId}`);
-  ws.onmessage=e=>{
-    const st=JSON.parse(e.data);
-    if(st.source!=='ui'){ $('#agentBanner').classList.add('show'); }
+function connectWS(jobId) {
+  if (ws) ws.close();
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/jobs/${jobId}`);
+  ws.onmessage = e => {
+    const st = JSON.parse(e.data);
+    if (st.source !== 'ui') { $('#agentBanner').classList.add('show'); }
     logLine(`${st.stage}: ${st.message}`);
-    stageFill(mapStageToIndex(st.stage), st.progress);
-    if(st.metrics?.loss) logLine(`  loss=${st.metrics.loss}`);
-    if(st.status==='done'){ latestResult=st.result; onDone(st); }
-    if(st.status==='failed'){ logLine('失败: '+(st.error||st.message)); $('#startBtn').disabled=false; }
+    const idx = mapStage(st.stage);
+    stageFill(idx, st.progress);
+    if (st.status === 'done') { stageDone(3); latestResult = st.result; onDone(st); }
+    if (st.status === 'failed') { logLine('Failed: ' + (st.error || st.message)); $('#startBtn').disabled = false; }
   };
 }
-function onDone(st){
-  logLine('✅ 蒸馏完成。模型目录: '+st.result.model_dir);
-  $('#startBtn').disabled=false;
+function onDone(st) {
+  logLine('Distillation complete. Model: ' + st.result.model_dir);
+  $('#startBtn').disabled = false;
 }
 
-// ---- playground ----
-$('#askBtn').onclick=async()=>{
-  const q=$('#question').value.trim();
-  if(!q) return;
-  $('#compare').innerHTML='<div class="qa"><div class="ans">对比中…</div></div>';
-  try{
-    const r=await api('/api/playground/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})});
-    $('#compare').innerHTML=
-      `<div class="qa"><h3>🧑‍🏫 教师模型</h3><div class="ans">${r.teacher.answer}</div><div class="meta">⏱ ${r.teacher.latency_ms==null?'—':r.teacher.latency_ms+' ms'}</div></div>`+
-      `<div class="qa"><h3>🧊 蒸馏小模型</h3><div class="ans">${r.student.answer}</div><div class="meta">⏱ ${r.student.latency_ms} ms</div></div>`;
-  }catch(e){ $('#compare').innerHTML=`<div class="qa"><div class="ans">${e.message}</div></div>`; }
+// --- playground ---
+$('#askBtn').onclick = async () => {
+  const q = $('#question').value.trim();
+  if (!q) return;
+  $('#compare').innerHTML = '<div class="pg-card"><div class="ans" style="color:var(--dim)">Comparing...</div></div>';
+  try {
+    const r = await api('/api/playground/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q }) });
+    $('#compare').innerHTML =
+      `<div class="pg-card"><h4>Teacher</h4><div class="ans">${r.teacher.answer}</div><div class="meta">${r.teacher.latency_ms == null ? '—' : r.teacher.latency_ms + ' ms'}</div></div>` +
+      `<div class="pg-card"><h4>Student</h4><div class="ans">${r.student.answer}</div><div class="meta">${r.student.latency_ms} ms</div></div>`;
+  } catch (e) { $('#compare').innerHTML = `<div class="pg-card"><div class="ans">${e.message}</div></div>`; }
 };
 
-// ---- exports ----
-$('#exportGguf').onclick=()=>{
-  if(!latestResult?.gguf_url){ $('#exportMsg').textContent='当前没有量化结果。请先完成一次含 GGUF 导出的蒸馏。'; return; }
-  location.href=latestResult.gguf_url;
+// --- exports ---
+$('#exportGguf').onclick = () => {
+  if (!latestResult?.gguf_url) { $('#exportMsg').textContent = 'No quantization result yet. Complete a distillation with GGUF export first.'; return; }
+  location.href = latestResult.gguf_url;
 };
-$('#exportOllama').onclick=async()=>{
-  if(!latestResult?.gguf){ $('#exportMsg').textContent='当前没有量化结果。'; return; }
-  try{
-    const r=await api('/api/ollama?gguf='+encodeURIComponent(latestResult.gguf));
-    $('#exportMsg').textContent='已生成 Modelfile：'+r.command;
-  }catch(e){ $('#exportMsg').textContent=e.message; }
+$('#exportOllama').onclick = async () => {
+  if (!latestResult?.gguf) { $('#exportMsg').textContent = 'No quantization result yet.'; return; }
+  try {
+    const r = await api('/api/ollama?gguf=' + encodeURIComponent(latestResult.gguf));
+    $('#exportMsg').textContent = 'Modelfile generated: ' + r.command;
+  } catch (e) { $('#exportMsg').textContent = e.message; }
 };
 
-// ---- server status ----
-api('/api/health').then(()=>$('#serverStatus').textContent='● 服务运行中').catch(()=>$('#serverStatus').textContent='○ 服务未连接');
+// --- status ---
+api('/api/health').then(() => { $('#status').textContent = 'Running'; $('#status').classList.remove('off'); }).catch(() => { $('#status').textContent = 'Offline'; });
 
-// ---- system metrics chart ----
-const mPoints=[];
-function drawChart(){
-  const c=$('#metricsChart'), ctx=c.getContext('2d'), W=c.width, H=c.height;
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle='#2a2f42'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,H/2); ctx.lineTo(W,H/2); ctx.stroke();
-  if(mPoints.length<2) return;
-  const step=W/mPoints.length;
-  const draw=(key,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=1.8; ctx.beginPath();
-    mPoints.forEach((p,i)=>{ const y=H-p[key]*H/100; i?ctx.lineTo(i*step,y):ctx.moveTo(0,y); }); ctx.stroke(); };
-  draw('cpu','#22d3ee'); draw('ram','#fbbf24');
-  ctx.fillStyle='#8b93a7'; ctx.font='11px sans-serif';
-  ctx.fillText('CPU %（青）',6,H-8); ctx.fillText('RAM %（黄）',86,H-8);
+// --- metrics ---
+const mPoints = [];
+function drawChart() {
+  const c = $('#metricsChart'), ctx = c.getContext('2d'), W = c.width, H = c.height;
+  ctx.clearRect(0, 0, W, H);
+  if (mPoints.length < 2) return;
+  const step = W / mPoints.length;
+  const draw = (key, color) => { ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+    mPoints.forEach((p, i) => { const y = H - p[key] * H / 100; i ? ctx.lineTo(i * step, y) : ctx.moveTo(0, y); }); ctx.stroke(); };
+  draw('cpu', '#c084fc'); draw('ram', '#fbbf24');
 }
-async function pollMetrics(){
-  try{
-    const m=await api('/api/metrics');
-    mPoints.push({cpu:m.cpu_percent, ram:(m.ram_used_gb/m.ram_total_gb*100)||0});
-    if(mPoints.length>90) mPoints.shift();
-    $('#metricsText').textContent=`CPU ${m.cpu_percent}% · RAM ${m.ram_used_gb}/${m.ram_total_gb} GB${m.device==='cuda'?(' · VRAM 占用 '+m.vram_used_gb+' GB'):''} · ${m.device==='cuda'?'GPU':'CPU'} 模式`;
+async function pollMetrics() {
+  try {
+    const m = await api('/api/metrics');
+    mPoints.push({ cpu: m.cpu_percent, ram: (m.ram_used_gb / m.ram_total_gb * 100) || 0 });
+    if (mPoints.length > 60) mPoints.shift();
+    $('#mCpu').textContent = m.cpu_percent + '%';
+    $('#mRam').textContent = m.ram_used_gb + '/' + m.ram_total_gb + ' GB';
+    if (m.device === 'cuda') { $('#mGpuWrap').style.display = ''; $('#mGpu').textContent = m.vram_used_gb + ' GB'; }
     drawChart();
-  }catch(e){}
+  } catch (e) {}
 }
-setInterval(pollMetrics,2000);
+setInterval(pollMetrics, 2000);
 
-// ---- local API node (llama.cpp OpenAI-compatible /v1) ----
-let localServer=null;
-async function refreshServer(){
-  try{ const r=await api('/api/server'); localServer=r.servers[0]||null; }
-  catch(e){ localServer=null; }
-  const el=$('#exportMsg');
-  if(localServer){
-    el.textContent=`● 本地 API 节点运行中（${localServer.gguf.split(/[\\\/]/).pop()} · pid ${localServer.pid}）${localServer.healthy?'':' · 健康检查失败'}`;
-    $('#exportApi').innerHTML='<div class="e">⏹</div><div>停止本地 API 节点</div>';
-  }else{
-    el.textContent='';
-    $('#exportApi').innerHTML='<div class="e">🔌</div><div>启动本地 API 节点</div>';
+// --- local API server ---
+let localServer = null;
+async function refreshServer() {
+  try { const r = await api('/api/server'); localServer = r.servers[0] || null; } catch (e) { localServer = null; }
+  const el = $('#exportMsg');
+  if (localServer) {
+    el.textContent = `API server running on ${localServer.gguf.split(/[\\\/]/).pop()} (pid ${localServer.pid})${localServer.healthy ? '' : ' — health check failed'}`;
+    $('#exportApi').querySelector('.ec-label').textContent = 'Stop API server';
+  } else {
+    if (!el.textContent.includes('failed') && !el.textContent.includes('generated') && !el.textContent.includes('Modelfile')) el.textContent = '';
+    $('#exportApi').querySelector('.ec-label').textContent = 'Start API server';
   }
 }
-$('#exportApi').onclick=async()=>{
-  if(localServer){
-    try{ await api('/api/server/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({port:localServer.port})}); }
-    catch(e){ $('#exportMsg').textContent='停止失败: '+e.message; }
-    await refreshServer();
-    return;
+$('#exportApi').onclick = async () => {
+  if (localServer) {
+    try { await api('/api/server/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port: localServer.port }) }); }
+    catch (e) { $('#exportMsg').textContent = 'Stop failed: ' + e.message; }
+    await refreshServer(); return;
   }
-  let gguf=$('#ggufPath').value.trim()||latestResult?.gguf;
-  if(!gguf){ $('#exportMsg').textContent='没有量化结果，请在上方输入 GGUF 路径'; return; }
-  try{
-    const r=await api('/api/server/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gguf,port:8123})});
-    $('#exportMsg').textContent=`节点已启动: ${r.base_url}/v1/chat/completions`;
-  }catch(e){ $('#exportMsg').textContent='启动失败: '+e.message; }
+  let gguf = $('#ggufPath').value.trim() || latestResult?.gguf;
+  if (!gguf) { $('#exportMsg').textContent = 'No quantization result. Enter a GGUF path above.'; return; }
+  try {
+    const r = await api('/api/server/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ gguf, port: 8123 }) });
+    $('#exportMsg').textContent = `Server started: ${r.base_url}/v1/chat/completions`;
+  } catch (e) { $('#exportMsg').textContent = 'Start failed: ' + e.message; }
   await refreshServer();
 };
-refreshServer(); setInterval(refreshServer,15000);
+refreshServer();
+setInterval(refreshServer, 15000);
 
-// ---- batch A/B evaluation ----
-$('#evalBtn').onclick=async()=>{
-  const q=$('#question').value.trim();
-  if(!q){ $('#evalResult').textContent='先在问题框输入一个问题，然后点批量评测'; return; }
-  if(!latestResult?.model_dir){ $('#evalResult').textContent='没有蒸馏模型，请先完成一次蒸馏任务'; return; }
-  let teacher=null;
-  if(localServer){ teacher=`openai:${localServer.base_url}#${localServer.gguf.split(/[\\\/]/).pop()}`; }
-  if(!teacher){ $('#evalResult').textContent='请先启动本地 API 节点作为教师后端（或用 .env 配置 TEACHER_*）'; return; }
-  $('#evalResult').textContent='评测中，请稍候…（每道题需数秒）';
-  try{
-    const r=await api('/api/eval',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({student:'transformers:'+latestResult.model_dir, teacher, questions:[q], max_tokens:64})});
-    $('#evalResult').innerHTML=
-      `一致性 exact_match=<b>${(r.consistency.exact_match_rate*100).toFixed(0)}%</b> · ROUGE-L F1=<b>${r.consistency.rouge_l_f1}</b> · `+
-      `教师延迟 <b>${r.teacher.avg_ms}ms</b> · 学生延迟 <b>${r.student.avg_ms}ms</b> · 相对加速 <b>${r.relative_speedup_x}x</b>`;
-  }catch(e){ $('#evalResult').textContent='评测失败: '+e.message; }
+// --- batch eval ---
+$('#evalBtn').onclick = async () => {
+  const q = $('#question').value.trim();
+  if (!q) { $('#evalResult').textContent = 'Enter a question first.'; return; }
+  if (!latestResult?.model_dir) { $('#evalResult').textContent = 'No student model. Complete a distillation first.'; return; }
+  let teacher = null;
+  if (localServer) teacher = `openai:${localServer.base_url}#${localServer.gguf.split(/[\\\/]/).pop()}`;
+  if (!teacher) { $('#evalResult').textContent = 'Start the API server as teacher backend first.'; return; }
+  $('#evalResult').textContent = 'Evaluating...';
+  try {
+    const r = await api('/api/eval', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student: 'transformers:' + latestResult.model_dir, teacher, questions: [q], max_tokens: 64 }) });
+    $('#evalResult').innerHTML =
+      `Consistency: exact_match <b>${(r.consistency.exact_match_rate * 100).toFixed(0)}%</b> · ROUGE-L F1 <b>${r.consistency.rouge_l_f1}</b> · ` +
+      `Teacher <b>${r.teacher.avg_ms}ms</b> · Student <b>${r.student.avg_ms}ms</b> · Speedup <b>${r.relative_speedup_x}x</b>`;
+  } catch (e) { $('#evalResult').textContent = 'Eval failed: ' + e.message; }
 };
 </script>
 </body>

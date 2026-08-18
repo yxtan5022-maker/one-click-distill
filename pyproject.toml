@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "OneClick Distill contributors" }]
-keywords = ["llm", "distillation", "fine-tune", "lora", "gguf", "mcp"]
+keywords = ["llm", "distillation", "fine-tune", "lora", "gguf", "mcp", "vision", "medical-imaging"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -18,6 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "torch>=2.1",
+    "torchvision>=0.16",
     "transformers>=4.40",
     "huggingface-hub>=0.23",
     "safetensors>=0.4",
@@ -29,9 +30,13 @@ dependencies = [
     "requests>=2.31",
     "psutil>=5.9",
     "mcp>=1.0",
+    "pydicom>=2.4",
+    "timm>=0.9",
+    "scikit-learn>=1.3",
 ]
 
 [project.optional-dependencies]
+vision = ["pydicom>=2.4", "timm>=0.9", "scikit-learn>=1.3"]
 unsloth = ["unsloth"]
 quantize = ["gguf>=0.10", "sentencepiece>=0.1.99"]
 dev = ["pytest>=8"]

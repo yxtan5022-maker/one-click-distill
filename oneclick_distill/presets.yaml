@@ -9,6 +9,21 @@ models:
   ultra: "Qwen/Qwen2.5-0.5B"                      # 极速版 0.5B-1.5B
   balanced: "Qwen/Qwen2.5-3B"                     # 平衡版 3B-7B
 
+vision:
+  teacher_backbones:
+    large: "convnext_base"       # strong, ~89M params
+    small: "convnext_small"      # mid-tier, ~50M
+    smoke: "resnet18"            # tiny, for CI / smoke tests
+  student_archs:
+    balanced: "efficientnet_b0"  # good trade-off, ~5M
+    fast: "efficientnet_b0"
+    smoke: "mobilenetv2_100"     # lightweight smoke test
+  img_sizes:
+    default: 224
+    smoke: 64
+  max_slices_per_series: 1
+  max_series: 6
+
 sizes:
   ultra:
     max_seq_len: 512

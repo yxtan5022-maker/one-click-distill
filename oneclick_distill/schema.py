@@ -25,15 +25,25 @@ class Status(str, Enum):
 class Stage(str, Enum):
     PREPARE = "prepare"
     DATA = "data"
+    IMPORT = "import"          # DICOM preprocessing (vision only)
     SYNTHETIC = "synthetic"
     TRAIN = "train"
+    EVAL = "eval"              # metric evaluation (vision only)
     QUANTIZE = "quantize"
     DONE = "done"
 
 
 ProgressCallback = Callable[[Stage, float, str, dict[str, Any]], None]
 
-STAGES = [Stage.PREPARE, Stage.DATA, Stage.SYNTHETIC, Stage.TRAIN, Stage.QUANTIZE, Stage.DONE]
+STAGES = [Stage.PREPARE, Stage.DATA, Stage.IMPORT, Stage.SYNTHETIC,
+          Stage.TRAIN, Stage.EVAL, Stage.QUANTIZE, Stage.DONE]
+
+
+LABEL_NAMES = [
+    "ACL", "MCL", "Medial Meniscus", "Lateral Meniscus",
+    "Medial OA", "Lateral OA", "PF OA",
+    "Effusion", "Synovitis", "Baker's", "Contusion", "Fracture",
+]
 
 
 def new_id() -> str:
@@ -62,6 +72,7 @@ class JobSpec:
 
     id: str = field(default_factory=new_id)
     source: str = "cli"         # "ui" | "cli" | "mcp"
+    task: str = "llm"           # "llm" | "vision-classify"
     data_paths: list[str] = field(default_factory=list)
     teacher: TeacherConfig = field(default_factory=TeacherConfig)
     model: str = ""             # resolved HF model id
@@ -71,11 +82,22 @@ class JobSpec:
     dry_run: bool = False       # probe VRAM with 1 fake step, no real train
     quantize: bool = True       # export to GGUF after training
     out_dir: str = ""           # default: runs/<id>
+    # ---- vision-classify fields (ignored when task=llm) ----
+    labels_csv: str = ""        # path to train_labels.csv
+    image_dir: str = ""         # path to root DICOM directory
+    reports_csv: str = ""       # path to reports CSV (optional)
+    series_csv: str = ""        # path to series descriptions CSV
+    teacher_backbone: str = ""  # timm model id for teacher (e.g. "convnext_base")
+    student_arch: str = ""      # timm model id for student (e.g. "efficientnet_b0")
+    n_folds: int = 5            # GroupKFold folds
+    seed: int = 42
+    export_format: str = "torchscript"  # torchscript | onnx | onnx_int8
 
     def to_dict(self) -> dict[str, Any]:
         d = {
             "id": self.id,
             "source": self.source,
+            "task": self.task,
             "data_paths": list(self.data_paths),
             "teacher": self.teacher.to_dict(),
             "model": self.model,
@@ -85,6 +107,15 @@ class JobSpec:
             "dry_run": self.dry_run,
             "quantize": self.quantize,
             "out_dir": self.out_dir,
+            "labels_csv": self.labels_csv,
+            "image_dir": self.image_dir,
+            "reports_csv": self.reports_csv,
+            "series_csv": self.series_csv,
+            "teacher_backbone": self.teacher_backbone,
+            "student_arch": self.student_arch,
+            "n_folds": self.n_folds,
+            "seed": self.seed,
+            "export_format": self.export_format,
         }
         return d
 
@@ -94,6 +125,7 @@ class JobSpec:
         return cls(
             id=d.get("id") or new_id(),
             source=d.get("source", "cli"),
+            task=d.get("task", "llm"),
             data_paths=list(d.get("data_paths", [])),
             teacher=TeacherConfig(
                 name=t.get("name", "none"),
@@ -108,6 +140,15 @@ class JobSpec:
             dry_run=bool(d.get("dry_run", False)),
             quantize=bool(d.get("quantize", True)),
             out_dir=d.get("out_dir", ""),
+            labels_csv=d.get("labels_csv", ""),
+            image_dir=d.get("image_dir", ""),
+            reports_csv=d.get("reports_csv", ""),
+            series_csv=d.get("series_csv", ""),
+            teacher_backbone=d.get("teacher_backbone", ""),
+            student_arch=d.get("student_arch", ""),
+            n_folds=int(d.get("n_folds", 5)),
+            seed=int(d.get("seed", 42)),
+            export_format=d.get("export_format", "torchscript"),
         )
 
 
