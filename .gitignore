@@ -21,6 +21,8 @@ ruff_cache/
 .DS_Store
 Thumbs.db
 node_modules/
+web-ui/node_modules/
+web-ui/dist/
 desktop/runtime/
 desktop/dist/
 models/
