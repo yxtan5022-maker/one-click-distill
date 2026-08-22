@@ -62,17 +62,41 @@ async def job_detail(job_id: str):
     return state.to_dict()
 
 
+@app.delete("/api/jobs/{job_id}")
+async def cancel_job(job_id: str):
+    """Cooperative cancel: the pipeline stops at its next progress callback."""
+    state = manager.cancel(job_id)
+    if not state:
+        return JSONResponse({"error": "job not found"}, status_code=404)
+    return state.to_dict()
+
+
 @app.post("/api/jobs")
 async def create_job(spec: dict):
     size = spec.get("size", "ultra")
     if size not in ("ultra", "balanced", "smoke"):
         return JSONResponse({"error": f"无效的规格: {size}（可选 ultra/balanced/smoke）"}, status_code=422)
     try:
-        job_spec = JobSpec.from_dict(spec)
+        job_spec = JobSpec.from_dict(fill_teacher_defaults(spec))
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": f"invalid spec: {e}"}, status_code=422)
     state = manager.submit(job_spec)
     return state.to_dict()
+
+
+def fill_teacher_defaults(spec: dict) -> dict:
+    """Fill missing teacher base_url/model from presets.yaml / .env so that
+    UI clients only need to send {name, model?, api_key?}."""
+    teacher = spec.get("teacher") or {}
+    name = str(teacher.get("name", "") or "")
+    if name and name != "none":
+        preset = settings.teacher_config(name)
+        if not teacher.get("base_url"):
+            teacher["base_url"] = preset["base_url"]
+        if not teacher.get("model"):
+            teacher["model"] = preset["model"]
+        spec["teacher"] = teacher
+    return spec
 
 
 @app.post("/api/files")
@@ -281,3 +305,70 @@ async def run_eval(body: dict):
     except Exception as e:  # noqa: BLE001
         return JSONResponse({"error": f"评测失败: {e}"}, status_code=500)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Export: (re-)quantize a completed job's model to GGUF
+# ---------------------------------------------------------------------------
+_QUANT_TYPES = {"f16", "q8_0", "q5_k_m", "q4_k_m", "q3_k_s"}
+
+
+def _gguf_url(path: Path) -> str | None:
+    try:
+        rel = path.resolve().relative_to(Path.cwd().resolve())
+        return "/" + str(rel).replace("\\", "/")
+    except ValueError:
+        return None
+
+
+def _pick_done_job(job_id: str):
+    if job_id:
+        s = manager.get(job_id)
+        if s and s.status == Status.DONE and s.result.get("model_dir"):
+            return s
+        return None
+    for j in manager.list():  # newest first
+        if j["status"] == Status.DONE.value and j.get("result", {}).get("model_dir"):
+            return manager.get(j["id"])
+    return None
+
+
+@app.post("/api/export")
+async def export_model(body: dict):
+    from ..quantize.llama_cpp import quantize
+
+    fmt = str(body.get("format", "gguf")).lower()
+    if fmt != "gguf":
+        return JSONResponse({"error": f"暂仅支持 GGUF 导出（收到 {fmt}）"}, status_code=422)
+    q = str(body.get("quantization", "q4_k_m")).lower()
+    if q not in _QUANT_TYPES:
+        return JSONResponse({"error": f"不支持的量化格式: {q}"}, status_code=422)
+
+    state = _pick_done_job(str(body.get("job_id", "")).strip())
+    if not state:
+        return JSONResponse(
+            {"error": "没有可导出的已完成蒸馏任务，请先运行一次蒸馏"},
+            status_code=404,
+        )
+
+    model_dir = Path(state.result["model_dir"])
+    out_dir = model_dir.parent / "export"
+    existing = sorted(out_dir.glob(f"model-{q}.gguf"))
+    if existing:
+        gguf = existing[-1]
+    else:
+        def _do():
+            return quantize(model_dir, out_dir, quant_type=q.upper())
+
+        try:
+            gguf = await asyncio.to_thread(_do)
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({"error": f"导出失败: {e}"}, status_code=500)
+        if not gguf:
+            return JSONResponse(
+                {"error": "量化工具不可用（llama.cpp 工具未就绪，可查看后端日志）"},
+                status_code=500,
+            )
+
+    size_mb = round(gguf.stat().st_size / 1024**2, 1)
+    return {"job_id": state.id, "gguf": str(gguf), "url": _gguf_url(gguf), "size_mb": size_mb}

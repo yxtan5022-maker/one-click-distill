@@ -42,8 +42,15 @@ def probe() -> dict[str, Any]:
     free_vram = 0.0
     device_name = "CPU"
 
-    torch = _torch()
-    if torch.cuda.is_available():
+    try:
+        torch = _torch()
+        cuda_available = torch.cuda.is_available()
+    except ImportError:
+        # torch not installed (e.g. server-only deployment): report CPU honestly.
+        torch = None
+        cuda_available = False
+
+    if torch is not None and cuda_available:
         device = "cuda"
         props = torch.cuda.get_device_properties(0)
         device_name = props.name
@@ -58,8 +65,8 @@ def probe() -> dict[str, Any]:
         "total_ram_gb": round(total_ram, 1),
         "free_ram_gb": round(free_ram, 1),
         "python": sys.version.split()[0],
-        "torch": torch.__version__,
-        "cuda_available": torch.cuda.is_available(),
+        "torch": getattr(torch, "__version__", "not installed"),
+        "cuda_available": cuda_available,
         "os": sys.platform,
         "disk_free_gb": round(_disk_free_gb(), 1),
     }

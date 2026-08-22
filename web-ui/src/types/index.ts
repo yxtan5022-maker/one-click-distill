@@ -23,18 +23,33 @@ export interface UploadedFile {
   type: string
   progress: number
   status: 'uploading' | 'ready' | 'error'
+  path?: string
+}
+
+// Mirrors the backend JobState (schema.py) exactly.
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+export type JobStage = 'prepare' | 'data' | 'import' | 'synthetic' | 'train' | 'eval' | 'quantize' | 'done'
+
+export interface JobResult {
+  model_dir?: string
+  gguf?: string | null
+  gguf_url?: string | null
+  [key: string]: unknown
 }
 
 export interface Job {
   id: string
-  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
-  stage: 'data' | 'training' | 'quantizing' | 'exporting' | 'done'
+  status: JobStatus
+  stage: JobStage
   progress: number
-  logs: string[]
-  createdAt: Date
-  completedAt?: Date
-  model?: string
-  dataset?: string
+  message: string
+  metrics?: Record<string, unknown>
+  error?: string | null
+  created_at: number
+  updated_at: number
+  source: string
+  spec?: Record<string, unknown>
+  result?: JobResult
 }
 
 export interface TrainingParams {

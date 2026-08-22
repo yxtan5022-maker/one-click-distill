@@ -11,6 +11,17 @@ from ..runner import run_pipeline
 from ..schema import JobSpec, JobState, Status, make_progress_cb
 
 
+class JobCancelled(BaseException):
+    """Raised inside a pipeline progress callback to unwind a cancelled job.
+
+    Inherits from BaseException (not Exception) so the pipeline's broad
+    `except Exception` handlers don't swallow it into a FAILED state."""
+
+    def __init__(self, job_id: str):
+        super().__init__(job_id)
+        self.job_id = job_id
+
+
 class JobManager:
     def __init__(self) -> None:
         self._jobs: dict[str, JobState] = {}
@@ -41,17 +52,34 @@ class JobManager:
         thread.start()
         return state
 
+    def cancel(self, job_id: str) -> JobState | None:
+        """Mark a job cancelled. The running pipeline unwinds at its next
+        progress callback (stage boundaries / training steps)."""
+        state = self._jobs.get(job_id)
+        if not state:
+            return None
+        if state.status in (Status.DONE, Status.FAILED, Status.CANCELLED):
+            return state
+        state.set_status(Status.CANCELLED, "取消中，等待当前步骤结束…")
+        self._publish(state)
+        return state
+
     def _run(self, spec: JobSpec, state: JobState) -> None:
         base_cb = make_progress_cb(state)
 
         def cb(stage, progress, message, metrics=None):
+            if state.status == Status.CANCELLED:
+                raise JobCancelled(spec.id)
             base_cb(stage, progress, message, metrics or {})
             self._publish(state)
 
         try:
             result = run_pipeline(spec, cb)
-            state.result = result
-            state.set_status(Status.DONE, "蒸馏完成 ✓")
+            if state.status != Status.CANCELLED:
+                state.result = result
+                state.set_status(Status.DONE, "蒸馏完成 ✓")
+        except JobCancelled:
+            state.set_status(Status.CANCELLED, "已取消")
         except Exception as e:  # noqa: BLE001
             state.set_status(Status.FAILED, str(e), str(e))
         finally:

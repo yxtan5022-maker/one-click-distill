@@ -114,6 +114,28 @@ export function getModelById(id: string): ModelPreset | undefined {
   return modelPresets.find(m => m.id === id)
 }
 
+// Preset id -> HuggingFace repo id, matching presets.yaml naming on the backend.
+const hfModelIds: Record<string, string> = {
+  'qwen2.5-0.5b': 'Qwen/Qwen2.5-0.5B',
+  'qwen2.5-1.5b': 'Qwen/Qwen2.5-1.5B',
+  'qwen2.5-3b': 'Qwen/Qwen2.5-3B',
+  'qwen2.5-7b': 'Qwen/Qwen2.5-7B',
+  'qwen2.5-14b': 'Qwen/Qwen2.5-14B',
+  'qwen2.5-32b': 'Qwen/Qwen2.5-32B',
+}
+
+export function resolveHfModel(id: string | null | undefined): string {
+  if (!id) return ''
+  return hfModelIds[id] ?? ''
+}
+
+// Backend hyper-parameter tiers (presets.yaml "sizes"). <=1.5B uses the fast tier.
+export function sizeTierFor(id: string | null | undefined): 'ultra' | 'balanced' {
+  const params = id ? getModelById(id)?.params : undefined
+  const b = params ? parseFloat(params) : NaN
+  return !isNaN(b) && b <= 1.5 ? 'ultra' : 'balanced'
+}
+
 export function getCompatibleModels(ram: number, vram: number | null): ModelPreset[] {
   return modelPresets.filter(model => {
     const ramOk = ram >= model.ramRequired

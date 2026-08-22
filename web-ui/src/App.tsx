@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Header } from "@/components/layout/Header"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { StatusBar } from "@/components/layout/StatusBar"
@@ -16,10 +16,12 @@ import { TrainingMonitor } from "@/components/pro/TrainingMonitor"
 import { ModelManager } from "@/components/pro/ModelManager"
 import { OneClickPipeline } from "@/components/pro/OneClickPipeline"
 import { useHardware } from "@/hooks/useHardware"
-import { modelPresets } from "@/components/model/ModelPresets"
-import type { UploadedFile, Metrics, ViewMode, ActiveView, Job, TrainingParams as TrainingParamsType, ModelVersion } from "@/types"
+import { modelPresets, resolveHfModel, sizeTierFor } from "@/components/model/ModelPresets"
+import type { UploadedFile, Metrics, ViewMode, ActiveView, Job, JobStage, TrainingParams as TrainingParamsType, ModelVersion } from "@/types"
 
-const API_BASE = "http://127.0.0.1:8080"
+// In dev the Vite server runs on :5173 and proxies nothing, so hit the backend
+// directly; in production the built bundle is served by FastAPI itself.
+const API_BASE = import.meta.env.DEV ? "http://127.0.0.1:8080" : ""
 
 const defaultTrainingParams: TrainingParamsType = {
   loraR: 8,
@@ -38,8 +40,13 @@ const sampleTrainingData = [
   { id: '2', prompt: 'LoRA是什么？', response: 'LoRA（Low-Rank Adaptation）是一种参数高效的微调方法，通过低秩分解减少可训练参数。' },
 ]
 
-const sampleModels: ModelVersion[] = [
-  { id: '1', name: 'Qwen2.5-3B-Distilled', version: 'v1.0', size: 1800000000, format: 'GGUF', quantization: 'Q4_K_M', createdAt: new Date('2026-08-18'), metrics: { loss: 0.2345, rougeL: 0.82 } },
+// Backend pipeline stages in display order (vision-only stages omitted).
+const STAGE_FLOW: Array<{ id: JobStage; name: string }> = [
+  { id: 'prepare', name: '环境准备' },
+  { id: 'data', name: '数据处理' },
+  { id: 'synthetic', name: '数据合成' },
+  { id: 'train', name: '模型训练' },
+  { id: 'quantize', name: '量化导出' },
 ]
 
 function App() {
@@ -69,7 +76,10 @@ function App() {
     learningRate: number
     tokensPerSecond?: number
   }>>([])
-  const [modelVersions, setModelVersions] = useState<ModelVersion[]>(sampleModels)
+  const [modelVersions, setModelVersions] = useState<ModelVersion[]>([])
+  const jobWsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => () => jobWsRef.current?.close(), [])
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -116,86 +126,221 @@ function App() {
     return () => clearInterval(interval)
   }, [connected])
 
-  const handleFilesAdd = useCallback((newFiles: File[]) => {
-    const uploadedFiles: UploadedFile[] = newFiles.map(file => ({
-      id: Math.random().toString(36).substr(2, 9),
+  const appendLog = useCallback((line: string) => {
+    setLogs(prev => {
+      const next = prev.length >= 300 ? prev.slice(-250) : [...prev]
+      if (next[next.length - 1] === line) return prev
+      next.push(line)
+      return next
+    })
+  }, [])
+
+  // Load completed jobs from previous sessions into the model manager.
+  useEffect(() => {
+    if (!connected) return
+    ;(async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/api/jobs`)
+        if (!resp.ok) return
+        const jobs = (await resp.json()) as Job[]
+        setModelVersions(jobs
+          .filter(j => j.status === 'done')
+          .map(j => ({
+            id: j.id,
+            name: String((j.spec as Record<string, unknown> | undefined)?.model ?? `job-${j.id}`),
+            version: new Date(j.created_at * 1000).toISOString().slice(0, 10),
+            size: Number(j.metrics?.size_mb ?? 0) * 1024 * 1024,
+            format: 'GGUF',
+            quantization: '-',
+            createdAt: new Date(j.created_at * 1000),
+          })))
+      } catch { /* backend history is optional */ }
+    })()
+  }, [connected])
+
+  const handleFilesAdd = useCallback(async (newFiles: File[]) => {
+    const items: UploadedFile[] = newFiles.map(file => ({
+      id: Math.random().toString(36).slice(2, 11),
       name: file.name,
       size: file.size,
       type: file.type,
       progress: 0,
-      status: 'ready'
+      status: 'uploading'
     }))
-    setFiles(prev => [...prev, ...uploadedFiles])
+    setFiles(prev => [...prev, ...items])
+    await Promise.all(items.map(async (item, i) => {
+      try {
+        const fd = new FormData()
+        fd.append('file', newFiles[i])
+        const resp = await fetch(`${API_BASE}/api/files`, { method: 'POST', body: fd })
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+        const data = await resp.json()
+        setFiles(prev => prev.map(f =>
+          f.id === item.id ? { ...f, path: data.path, progress: 100, status: 'ready' } : f))
+      } catch {
+        setFiles(prev => prev.map(f =>
+          f.id === item.id ? { ...f, status: 'error' } : f))
+      }
+    }))
   }, [])
 
   const handleFileRemove = useCallback((id: string) => {
     setFiles(prev => prev.filter(f => f.id !== id))
   }, [])
 
-  const handleStartTraining = useCallback(async () => {
+  // Subscribe to the backend's live job stream over WebSocket.
+  const trackJob = useCallback((jobId: string) => {
+    jobWsRef.current?.close()
+    const wsBase = API_BASE.replace(/^http/, 'ws')
+    const ws = new WebSocket(`${wsBase}/ws/jobs/${jobId}`)
+    ws.onmessage = ev => {
+      try {
+        const st = JSON.parse(ev.data) as Job
+        setJob(st)
+        appendLog(`[${st.stage}] ${st.message}`)
+        if (st.status === 'done') {
+          const gguf = st.result?.gguf ? `，GGUF：${st.result.gguf}` : ''
+          appendLog(`[SUCCESS] 蒸馏完成 ✓${gguf}`)
+        } else if (st.status === 'failed') {
+          appendLog(`[ERROR] 任务失败: ${st.error ?? st.message}`)
+        }
+      } catch { /* malformed frame */ }
+    }
+    ws.onclose = () => {
+      // Fetch the final state in case the socket closed before terminal update.
+      fetch(`${API_BASE}/api/jobs/${jobId}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(st => { if (st && st.id) setJob(st) })
+        .catch(() => undefined)
+    }
+    jobWsRef.current = ws
+  }, [appendLog])
+
+  const startTraining = useCallback(async (override?: { model?: string | null }) => {
+    const paths = files.map(f => f.path).filter((p): p is string => !!p)
+    const modelId = override?.model !== undefined ? override.model : selectedModel
+    const body = {
+      source: 'ui',
+      task: 'llm',
+      data_paths: paths,
+      teacher: {
+        name: teacherProvider || 'none',
+        model: teacherModel || '',
+        api_key: apiKey || '',
+      },
+      model: resolveHfModel(modelId),
+      size: sizeTierFor(modelId),
+      quantize: true,
+    }
     try {
       const response = await fetch(`${API_BASE}/api/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          files: files.map(f => f.name),
-          model: selectedModel,
-          teacher: {
-            provider: teacherProvider,
-            model: teacherModel,
-            apiKey
-          },
-          trainingParams
-        })
+        body: JSON.stringify(body)
       })
-      if (response.ok) {
-        const data = await response.json()
-        setJob(data)
-        setLogs(prev => [...prev, `[INFO] 训练任务已启动: ${data.id}`])
+      const data = await response.json()
+      if (!response.ok) {
+        setLogs(prev => [...prev, `[ERROR] 启动失败: ${data.error ?? response.status}`])
+        return
       }
+      setJob(data)
+      setLogs(prev => [...prev,
+        `[INFO] 训练任务已启动: ${data.id}（模型=${body.model || '按规格自动'} 规格=${body.size} 数据=${paths.length} 个文件）`])
+      trackJob(data.id)
     } catch (error) {
-      setLogs(prev => [...prev, `[ERROR] 启动训练失败: ${error}`])
+      setLogs(prev => [...prev, `[ERROR] 无法连接后端: ${error}`])
     }
-  }, [files, selectedModel, teacherProvider, teacherModel, apiKey, trainingParams])
+  }, [files, selectedModel, teacherProvider, teacherModel, apiKey, trackJob])
 
-  const handlePauseTraining = useCallback(() => {
-    setLogs(prev => [...prev, "[INFO] 训练已暂停"])
-  }, [])
+  const handleStartTraining = useCallback(() => {
+    void startTraining()
+  }, [startTraining])
 
-  const handleResumeTraining = useCallback(() => {
-    setLogs(prev => [...prev, "[INFO] 训练已继续"])
-  }, [])
+  const handleCancelTraining = useCallback(async () => {
+    if (!job) return
+    try {
+      const resp = await fetch(`${API_BASE}/api/jobs/${job.id}`, { method: 'DELETE' })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setLogs(prev => [...prev, `[ERROR] 取消失败: ${data.error ?? resp.status}`])
+        return
+      }
+      setJob(data)
+      setLogs(prev => [...prev, `[INFO] 已请求取消任务 ${job.id}`])
+    } catch (error) {
+      setLogs(prev => [...prev, `[ERROR] 取消失败: ${error}`])
+    }
+  }, [job])
 
-  const handleCancelTraining = useCallback(() => {
-    setJob(null)
-    setLogs(prev => [...prev, "[INFO] 训练已取消"])
-  }, [])
+  const hasGgufModel = !!(job && job.status === 'done' && (job.result?.gguf || job.result?.model_dir))
 
   const handleExport = useCallback(async () => {
+    if (!job) return
     setIsExporting(true)
     try {
       const response = await fetch(`${API_BASE}/api/export`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: exportFormat, quantization })
+        body: JSON.stringify({ job_id: job.id, format: exportFormat, quantization })
       })
-      if (response.ok) {
-        setLogs(prev => [...prev, "[SUCCESS] 导出完成"])
+      const data = await response.json()
+      if (!response.ok) {
+        setLogs(prev => [...prev, `[ERROR] 导出失败: ${data.error ?? response.status}`])
+        return
       }
+      setLogs(prev => [...prev, `[SUCCESS] 导出完成: ${data.gguf}（${data.size_mb} MB）`])
     } catch (error) {
       setLogs(prev => [...prev, `[ERROR] 导出失败: ${error}`])
     } finally {
       setIsExporting(false)
     }
-  }, [exportFormat, quantization])
+  }, [job, exportFormat, quantization])
 
-  const handleOllamaImport = useCallback(() => {
-    setLogs(prev => [...prev, "[INFO] 正在导入到 Ollama..."])
-  }, [])
+  const handleOllamaImport = useCallback(async () => {
+    const gguf = job?.result?.gguf
+    if (!gguf) {
+      setLogs(prev => [...prev, '[ERROR] 没有可导入的 GGUF 文件'])
+      return
+    }
+    try {
+      const resp = await fetch(`${API_BASE}/api/ollama`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gguf })
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setLogs(prev => [...prev, `[ERROR] Ollama 导入失败: ${data.error ?? resp.status}`])
+        return
+      }
+      setLogs(prev => [...prev, `[INFO] 在终端执行以下命令完成导入: ${data.command}`])
+    } catch (error) {
+      setLogs(prev => [...prev, `[ERROR] Ollama 导入失败: ${error}`])
+    }
+  }, [job])
 
-  const handleStartServer = useCallback(() => {
-    setLogs(prev => [...prev, "[INFO] 正在启动本地 API 服务器..."])
-  }, [])
+  const handleStartServer = useCallback(async () => {
+    const gguf = job?.result?.gguf
+    if (!gguf) {
+      setLogs(prev => [...prev, '[ERROR] 没有可部署的 GGUF 文件'])
+      return
+    }
+    try {
+      const resp = await fetch(`${API_BASE}/api/server/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gguf })
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setLogs(prev => [...prev, `[ERROR] 启动本地 API 失败: ${data.error ?? resp.status}`])
+        return
+      }
+      setLogs(prev => [...prev, `[SUCCESS] 本地 API 已就绪: ${JSON.stringify(data)}`])
+    } catch (error) {
+      setLogs(prev => [...prev, `[ERROR] 启动本地 API 失败: ${error}`])
+    }
+  }, [job])
 
   const handleDataAdd = useCallback((item: { prompt: string; response: string }) => {
     setTrainingData(prev => [...prev, { ...item, id: Math.random().toString(36).substr(2, 9) }])
@@ -217,7 +362,7 @@ function App() {
     setLogs(prev => [...prev, `[INFO] 对比模型: ${ids.join(', ')}`])
   }, [])
 
-  const handleOneClickPipeline = useCallback(async (config: {
+  const handleOneClickPipeline = useCallback((config: {
     model: string
     params: TrainingParamsType
     autoMode: boolean
@@ -225,20 +370,35 @@ function App() {
     setLogs(prev => [...prev, `[INFO] 启动一键蒸馏: 模型=${config.model}, 自动模式=${config.autoMode}`])
     setTrainingParams(config.params)
     setSelectedModel(config.model)
-    await handleStartTraining()
-  }, [handleStartTraining])
+    // Pass the model explicitly — setState above won't be visible to the
+    // in-flight closure this tick.
+    void startTraining({ model: config.model })
+  }, [startTraining])
 
+  const currentStageIdx = job ? STAGE_FLOW.findIndex(s => s.id === job.stage) : -1
+  const doneAll = job?.stage === 'done'
   const trainingStages: Array<{
     id: string
     name: string
     status: 'pending' | 'running' | 'completed' | 'failed'
     progress?: number
-  }> = [
-    { id: 'data', name: '数据处理', status: job?.stage === 'data' ? 'running' : job ? 'completed' : 'pending', progress: job?.stage === 'data' ? job.progress : undefined },
-    { id: 'training', name: '模型训练', status: job?.stage === 'training' ? 'running' : job?.stage === 'data' ? 'pending' : 'pending', progress: job?.stage === 'training' ? job.progress : undefined },
-    { id: 'quantizing', name: '模型量化', status: job?.stage === 'quantizing' ? 'running' : 'pending', progress: job?.stage === 'quantizing' ? job.progress : undefined },
-    { id: 'exporting', name: '导出模型', status: job?.stage === 'exporting' ? 'running' : 'pending', progress: job?.stage === 'exporting' ? job.progress : undefined },
-  ]
+  }> = STAGE_FLOW.map((s, i) => {
+    let status: 'pending' | 'running' | 'completed' | 'failed' = 'pending'
+    if (job) {
+      if (i < currentStageIdx || doneAll) status = 'completed'
+      else if (i === currentStageIdx) {
+        status = job.status === 'done' ? 'completed'
+          : job.status === 'failed' && job.stage !== 'prepare' ? 'failed'
+          : 'running'
+      }
+    }
+    return {
+      id: s.id,
+      name: s.name,
+      status,
+      progress: i === currentStageIdx && !doneAll ? job?.progress : undefined,
+    }
+  })
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -305,14 +465,17 @@ function App() {
                 <OneClickPipeline
                   hardware={hardware}
                   onStartPipeline={handleOneClickPipeline}
-                  isRunning={job?.status === 'running'}
+                  isRunning={job?.status === 'running' || job?.status === 'queued'}
                 />
                 <TrainingControl
-                  status={job?.status === 'running' ? 'running' : job?.status === 'completed' ? 'completed' : job?.status === 'failed' ? 'failed' : 'idle'}
+                  status={
+                    job?.status === 'running' || job?.status === 'queued' ? 'running'
+                    : job?.status === 'done' ? 'completed'
+                    : job?.status === 'failed' ? 'failed'
+                    : 'idle'
+                  }
                   onStart={handleStartTraining}
-                  onPause={handlePauseTraining}
-                  onResume={handleResumeTraining}
-                  onCancel={handleCancelTraining}
+                  onCancel={() => void handleCancelTraining()}
                 />
                 <ProgressTracker
                   stages={trainingStages}
@@ -345,11 +508,11 @@ function App() {
                 quantization={quantization}
                 onFormatChange={setExportFormat}
                 onQuantizationChange={setQuantization}
-                onExport={handleExport}
-                onOllamaImport={handleOllamaImport}
-                onStartServer={handleStartServer}
+                onExport={() => void handleExport()}
+                onOllamaImport={() => void handleOllamaImport()}
+                onStartServer={() => void handleStartServer()}
                 isExporting={isExporting}
-                hasModel={!!selectedModel}
+                hasModel={hasGgufModel}
               />
             )}
           </div>

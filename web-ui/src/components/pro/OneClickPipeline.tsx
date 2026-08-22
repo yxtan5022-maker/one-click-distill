@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Zap, CheckCircle2, AlertTriangle, Loader2, ChevronRight } from "lucide-react"
+import { getModelById } from "@/components/model/ModelPresets"
 import type { Hardware, TrainingParams } from "@/types"
 
 interface OneClickPipelineProps {
@@ -42,12 +43,13 @@ export function OneClickPipeline({ hardware, onStartPipeline, isRunning, classNa
   }, [hardware])
 
   const getRecommendedModel = () => {
-    if (!hardware) return '0.5b'
+    // IDs match ModelPresets so App can resolve HF repo ids / size tiers.
+    if (!hardware) return 'qwen2.5-0.5b'
     const totalMemory = (hardware.ram || 0) + (hardware.vram || 0)
-    if (totalMemory >= 24) return '7b'
-    if (totalMemory >= 12) return '3b'
-    if (totalMemory >= 6) return '1.5b'
-    return '0.5b'
+    if (totalMemory >= 24) return 'qwen2.5-7b'
+    if (totalMemory >= 12) return 'qwen2.5-3b'
+    if (totalMemory >= 6) return 'qwen2.5-1.5b'
+    return 'qwen2.5-0.5b'
   }
 
   const getRecommendedParams = (): TrainingParams => {
@@ -140,7 +142,7 @@ export function OneClickPipeline({ hardware, onStartPipeline, isRunning, classNa
               </label>
             </div>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>推荐模型: <span className="text-foreground font-medium">{recommendedModel.toUpperCase()}</span></p>
+              <p>推荐模型: <span className="text-foreground font-medium">{getModelById(recommendedModel)?.name ?? recommendedModel}</span></p>
               <p>训练后端: <span className="text-foreground font-medium">{hardware.strategy}</span></p>
               <p>序列长度: <span className="text-foreground font-medium">{recommendedParams.maxSeqLength}</span></p>
               <p>批次大小: <span className="text-foreground font-medium">{recommendedParams.batchSize}</span></p>

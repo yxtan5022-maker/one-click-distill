@@ -1,12 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, Square, Loader2 } from "lucide-react"
+import { Play, Square, Loader2 } from "lucide-react"
 
 interface TrainingControlProps {
   status: 'idle' | 'running' | 'paused' | 'completed' | 'failed'
   onStart: () => void
-  onPause: () => void
-  onResume: () => void
   onCancel: () => void
   className?: string
 }
@@ -14,8 +12,6 @@ interface TrainingControlProps {
 export function TrainingControl({
   status,
   onStart,
-  onPause,
-  onResume,
   onCancel,
   className
 }: TrainingControlProps) {
@@ -35,43 +31,41 @@ export function TrainingControl({
               开始训练
             </Button>
           )}
-          {status === 'running' && (
+          {(status === 'running' || status === 'paused') && (
             <>
-              <Button variant="outline" onClick={onPause} className="flex items-center gap-2">
-                <Pause className="h-4 w-4" />
-                暂停
-              </Button>
               <Button variant="destructive" onClick={onCancel} className="flex items-center gap-2">
                 <Square className="h-4 w-4" />
                 取消
               </Button>
-              <div className="flex items-center gap-2 text-primary">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">训练中...</span>
-              </div>
-            </>
-          )}
-          {status === 'paused' && (
-            <>
-              <Button onClick={onResume} className="flex items-center gap-2">
-                <Play className="h-4 w-4" />
-                继续
-              </Button>
-              <Button variant="destructive" onClick={onCancel} className="flex items-center gap-2">
-                <Square className="h-4 w-4" />
-                取消
-              </Button>
+              {status === 'running' && (
+                <div className="flex items-center gap-2 text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">训练中...</span>
+                </div>
+              )}
             </>
           )}
           {status === 'completed' && (
-            <div className="flex items-center gap-2 text-success">
-              <span className="text-sm font-medium">训练完成</span>
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-success">
+                <span className="text-sm font-medium">训练完成</span>
+              </div>
+              <Button onClick={onStart} variant="outline" className="flex items-center gap-2">
+                <Play className="h-4 w-4" />
+                再次训练
+              </Button>
+            </>
           )}
           {status === 'failed' && (
-            <div className="flex items-center gap-2 text-destructive">
-              <span className="text-sm font-medium">训练失败</span>
-            </div>
+            <>
+              <div className="flex items-center gap-2 text-destructive">
+                <span className="text-sm font-medium">训练失败</span>
+              </div>
+              <Button onClick={onStart} variant="outline" className="flex items-center gap-2">
+                <Play className="h-4 w-4" />
+                重试
+              </Button>
+            </>
           )}
         </div>
       </CardContent>
