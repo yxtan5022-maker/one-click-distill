@@ -89,6 +89,8 @@ def list_servers() -> list[dict[str, Any]]:
     out = []
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     for f in sorted(STATE_DIR.glob("*.json")):
+        if not f.stem.isdigit():
+            continue
         info = _load(int(f.stem))
         if not info:
             continue

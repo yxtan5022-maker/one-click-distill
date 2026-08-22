@@ -102,7 +102,7 @@ def cmd_pipeline(args) -> int:
         max_steps=args.max_steps,
         smoke=args.smoke,
         dry_run=args.dry_run,
-        quantize=args.quantize,
+        quantize=not args.no_quantize,
         out_dir=args.out_dir,
         task=args.task,
         labels_csv=args.labels_csv or "",
@@ -288,6 +288,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = sub.add_parser("demo", help="一键演示：内置数据跑通冒烟流程")
     demo.add_argument("--max-steps", type=int, default=None)
+    demo.set_defaults(
+        task="llm",
+        labels_csv="",
+        image_dir="",
+        reports_csv="",
+        series_csv="",
+        teacher_backbone="",
+        student_arch="",
+        n_folds=5,
+        seed=42,
+        export_format="torchscript",
+        no_quantize=True,
+    )
     demo.set_defaults(func=cmd_demo)
 
     serve = sub.add_parser("serve", help="启动 FastAPI + WebSocket 后端（含内置 Web UI）")

@@ -69,11 +69,11 @@ def probe() -> dict[str, Any]:
 
 def _total_ram_gb() -> float:
     if sys.platform == "win32":
-        return float(os.sysconf_names.get("", 0)) if False else _win_total_ram_gb()
+        return _win_total_ram_gb()
     try:
-        import resource
+        import psutil
 
-        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+        return psutil.virtual_memory().total / 1024**3
     except Exception:
         return 0.0
 
@@ -104,6 +104,13 @@ def _win_total_ram_gb() -> float:
 
 
 def _free_ram_gb() -> float:
+    if sys.platform != "win32":
+        try:
+            import psutil
+
+            return psutil.virtual_memory().available / 1024**3
+        except Exception:
+            return 0.0
     try:
         import ctypes
 

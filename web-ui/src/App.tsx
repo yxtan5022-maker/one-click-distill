@@ -95,10 +95,12 @@ function App() {
         if (response.ok) {
           const data = await response.json()
           const newMetrics: Metrics = {
-            cpu: data.cpu || 0,
-            ram: data.ram || 0,
-            gpu: data.gpu,
-            vram: data.vram,
+            cpu: typeof data.cpu_percent === 'number' ? data.cpu_percent : 0,
+            ram: data.ram_total_gb
+              ? Math.min(100, Math.round((data.ram_used_gb / data.ram_total_gb) * 1000) / 10)
+              : 0,
+            gpu: undefined,
+            vram: typeof data.vram_used_gb === 'number' ? data.vram_used_gb : undefined,
             timestamp: new Date()
           }
           setMetrics(newMetrics)

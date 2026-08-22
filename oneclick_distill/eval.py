@@ -231,7 +231,16 @@ def load_questions(source: str, default: list[str]) -> list[str]:
     p = Path(source)
     if p.exists():
         if p.suffix == ".jsonl":
-            rows = [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
-            return [r.get("question") or r.get("instruction") for r in rows]
+            rows = []
+            for x in p.read_text(encoding="utf-8").splitlines():
+                if not x.strip():
+                    continue
+                try:
+                    obj = json.loads(x)
+                except json.JSONDecodeError:
+                    continue
+                rows.append(obj)
+            questions = [r.get("question") or r.get("instruction") for r in rows if isinstance(r, dict)]
+            return [q for q in questions if q]
         return [l.strip() for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
     return [source]

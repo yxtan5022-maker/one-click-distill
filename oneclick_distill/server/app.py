@@ -77,7 +77,8 @@ async def create_job(spec: dict):
 
 @app.post("/api/files")
 async def upload_file(file: UploadFile):
-    path = UPLOADS_DIR / f"{uuid.uuid4().hex}_{file.filename}"
+    safe_name = (file.filename or "upload.bin").replace("\\", "/").rsplit("/", 1)[-1] or "upload.bin"
+    path = UPLOADS_DIR / f"{uuid.uuid4().hex}_{safe_name}"
     path.write_bytes(await file.read())
     return {"name": file.filename, "path": str(path), "size": path.stat().st_size}
 
@@ -85,15 +86,17 @@ async def upload_file(file: UploadFile):
 @app.websocket("/ws/jobs/{job_id}")
 async def ws_jobs(websocket: WebSocket, job_id: str):
     await websocket.accept()
-    state = manager.get(job_id)
-    if state:
-        await websocket.send_json(state.to_dict())
     q = manager.subscribe(job_id)
     try:
+        state = manager.get(job_id)
+        if state:
+            await websocket.send_json(state.to_dict())
         while True:
             payload = await asyncio.wait_for(q.get(), timeout=30)
             await websocket.send_json(payload)
     except (asyncio.TimeoutError, WebSocketDisconnect):
+        pass
+    finally:
         manager.unsubscribe(job_id, q)
 
 
